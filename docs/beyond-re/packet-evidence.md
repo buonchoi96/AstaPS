@@ -32,16 +32,36 @@ used as semantic-name references only; their field numbers are not accepted as 7
 
 | Packet/system | 7.1 CmdId | Typed 7.1 schema in AstaPS | Existing handler/response | Confidence | Action |
 |---|---:|---|---|---|---|
-| `_GetBeyondPlayerInfoReq` | 5960 | Named Req wrapper not present | none | opcode high, wrapper unknown | Handle by opcode only if response can stay schema-safe; otherwise capture/defer wrapper fields |
-| `_GetBeyondPlayerInfoRsp` | 9779 | Named Rsp wrapper not present | none | opcode high, wrapper unknown | Do not fabricate wrapper fields; presence is emitted through verified structures where possible |
+| `_GetBeyondPlayerInfoReq` | 5960 | Named Req wrapper not present | none | opcode high, wrapper unknown | **Deferred/raw-only**; no typed handler without a verified 7.1 wrapper |
+| `_GetBeyondPlayerInfoRsp` | 9779 | Named Rsp wrapper not present | none | opcode high, wrapper unknown | **Deferred/raw-only**; presence is emitted through verified `WorldPlayerInfoNotify` structures instead |
 | `WorldPlayerInfoNotify` Beyond list | 2076 | yes | notify exists but omits Beyond list | high | Implement typed `_BeyondPlayerInfo` population |
-| `_BeyondCreateHallReq/Rsp` | 26704 / 2767 | Named wrappers not present | none | opcodes high, payload shape unresolved | Search direct 7.1 descriptors; raw-only/defer if shape cannot be proven |
-| `_BeyondHallChangeAuthModeReq/Rsp/Notify` | 28720 / 22055 / 4532 | Named wrappers not present | none | opcodes high, payload shape unresolved | Search direct 7.1 descriptors; no inferred field numbers |
-| `_BeyondHallChangeTagsReq/Rsp/Notify` | 28249 / 7262 / 326 | Named wrappers not present | none | opcodes high, payload shape unresolved | Search direct 7.1 descriptors; no inferred field numbers |
+| `_BeyondCreateHallReq/Rsp` | 26704 / 2767 | Named wrappers not present | none | opcodes high, payload shape unresolved | **Deferred/raw-only**; deterministic Hall lifecycle is not implemented without typed 7.1 payload evidence |
+| `_BeyondHallChangeAuthModeReq/Rsp/Notify` | 28720 / 22055 / 4532 | Named wrappers not present | none | opcodes high, payload shape unresolved | **Deferred/raw-only**; no inferred field numbers |
+| `_BeyondHallChangeTagsReq/Rsp/Notify` | 28249 / 7262 / 326 | Named wrappers not present | none | opcodes high, payload shape unresolved | **Deferred/raw-only**; no inferred field numbers |
 | `_BeyondProfileTagListUpdateReq/Rsp` | 24647 / 9509 | Named wrappers not present | none | opcodes high, payload shape unresolved | Raw/decode-only until direct schema is identified |
 | `_GetBeyondPlayerSocialInfoReq/Rsp` | unknown / 3347 | response class exists; request CmdId unknown | non-registering empty handler exists | response partial | Keep request deferred; never promote old request CmdId |
 | `_GetBeyondPlayerDetailReq/Rsp` | unknown / 4162 | named request/response pair not established | none | response opcode only | Defer request; capture response if observed |
 | candidate `UgcDungeon*` watch set | known candidate IDs | varies | unrelated legacy surface | candidate only | Watch/capture only; do not label as Miliastra reuse |
+
+## Final Subagent A implementation boundary
+
+Implemented on `agent/protocol-handlers`:
+
+- evidence-backed `BeyondPlayerState` serialization for online/offline, Teyvat/Beyond,
+  NONE/HALL/DUNGEON/EDIT, `is_in_team`, and neutral wire identities for detail fields 3-8;
+- in-memory presence resolution for players already known to be in a live world;
+- `WorldPlayerInfoNotify` population of the verified repeated `_BeyondPlayerInfo` field 13.
+
+Intentionally not implemented because typed 7.1 request/response payload evidence is missing:
+
+- `_GetBeyondPlayerInfoReq/Rsp` handlers;
+- Hall create/auth/tag lifecycle handlers and GUID/passcode semantics;
+- BGM request handling (request CmdId remains unknown);
+- Beyond social/detail request handlers where the request CmdId is non-positive/unknown;
+- profile-tag update semantics beyond raw capture.
+
+These paths remain recorder/raw-wire work until a live 7.1 capture or trustworthy 7.1 descriptor
+establishes the missing payload shapes. No 6.x field number is promoted into 7.1.
 
 ## Baseline build/test evidence
 
