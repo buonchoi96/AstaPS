@@ -281,13 +281,28 @@ public final class QuestManager extends BasePlayerManager {
     }
 
     public void onLogin() {
-        if (this.isQuestingEnabled()) {
-            // The sweep is what fills a fresh quest log at login; see questing.triggerAllOnLogin.
-            if (GAME_OPTIONS.questing.triggerAllOnLogin) {
-                this.enableQuests();
-            }
-            this.sendGivingRecords();
+        // Questing-off accounts still carry a few synthetic/persisted quests used by helpers such
+        // as Statue of the Seven talk gates. Rewinding those quests here is not a no-op:
+        // GameMainQuest.rewind() calls GameQuest.rewind(), which clears progress, restarts the
+        // quest, can execute start actions, and may replace the player's saved position with the
+        // quest rewind position. A fresh account has none of those persisted quests yet, which is
+        // why first login can enter scene 3 while the next login stalls during scene loading.
+        //
+        // When questing is disabled, login must treat those records as passive compatibility state
+        // and must not replay the quest lifecycle before PlayerEnterSceneNotify.
+        if (!this.isQuestingEnabled()) {
+            Grasscutter.getLogger()
+                    .debug(
+                            "QuestManager login rewind skipped for uid={} because questing is disabled.",
+                            this.player.getUid());
+            return;
         }
+
+        // The sweep is what fills a fresh quest log at login; see questing.triggerAllOnLogin.
+        if (GAME_OPTIONS.questing.triggerAllOnLogin) {
+            this.enableQuests();
+        }
+        this.sendGivingRecords();
 
         List<GameMainQuest> activeQuests = getActiveMainQuests();
         List<GameQuest> activeSubs = new ArrayList<>(activeQuests.size());
