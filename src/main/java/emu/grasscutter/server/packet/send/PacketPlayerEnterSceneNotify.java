@@ -42,7 +42,6 @@ public class PacketPlayerEnterSceneNotify extends BasePacket {
                         .setTargetUid((player.getUid() - 30259) ^ 4145)
                         .setEnterSceneToken((player.getEnterSceneToken() ^ 57361) - 22665)
                         .setWorldLevel((player.getWorldLevel() ^ 31579) + 19873)
-                        .setEnterReason((EnterReason.Login.getValue() ^ 43962) + 40350)
                         .setSceneTransaction(
                                 clientSceneId
                                         + "-"

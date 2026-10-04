@@ -35,7 +35,6 @@ public final class DomainHandbookHelper {
     private static volatile boolean loaded;
     private static final Map<Integer, List<Integer>> HANDBOOK_ENTRIES = new HashMap<>();
     private static final Map<Integer, Set<Integer>> HANDBOOK_AREAS = new HashMap<>();
-    private static final Set<Integer> DEFERRED_DONE = ConcurrentHashMap.newKeySet();
     private static final Map<Integer, Long> LAST_FULL_SYNC_MS = new ConcurrentHashMap<>();
     private static final long FULL_SYNC_COOLDOWN_MS = 30_000L;
 
@@ -48,9 +47,7 @@ public final class DomainHandbookHelper {
         try {
             ensureLoaded();
             applyUnlocks(player);
-            DEFERRED_DONE.remove(player.getUid());
             LAST_FULL_SYNC_MS.remove(player.getUid());
-            scheduleDeferredSync(player);
             Grasscutter.getLogger()
                     .debug(
                             "DomainHandbook login-prepare uid={} entries={} areas={}",
@@ -107,7 +104,6 @@ public final class DomainHandbookHelper {
         Long last = LAST_FULL_SYNC_MS.get(player.getUid());
         if (last != null
                 && now - last < FULL_SYNC_COOLDOWN_MS
-                && !"deferred".equals(reason)
                 && !"enter-scene".equals(reason)) {
             PacketGetDailyDungeonEntryInfoRsp.sendBothLayouts(player, 3);
             return;
@@ -163,33 +159,6 @@ public final class DomainHandbookHelper {
         }
     }
 
-    private static void scheduleDeferredSync(Player player) {
-        final int uid = player.getUid();
-        Thread t =
-                new Thread(
-                        () -> {
-                            try {
-                                Thread.sleep(4000L);
-                                Player online = Grasscutter.getGameServer().getPlayerByUid(uid);
-                                if (online == null || online.getSession() == null) {
-                                    return;
-                                }
-                                if (!DEFERRED_DONE.add(uid)) {
-                                    return;
-                                }
-                                applyUnlocks(online);
-                                syncToClient(online, "deferred");
-                            } catch (InterruptedException ie) {
-                                Thread.currentThread().interrupt();
-                            } catch (Throwable e) {
-                                Grasscutter.getLogger()
-                                        .warn("DomainHandbook deferred: {}", e.toString());
-                            }
-                        },
-                        "DomainHandbook-defer-" + uid);
-        t.setDaemon(true);
-        t.start();
-    }
 
     private static synchronized void ensureLoaded() {
         if (loaded) {
