@@ -171,11 +171,13 @@ jar {
     }
 
     archiveBaseName = 'grasscutter'
-    if (project.hasProperty('jarFilename')) {
-        // archiveExtension is a lazy Property, so interpolating it directly stringifies the
-        // property itself and the jar lands under a filename containing its description.
-        archiveFileName = "${jarFilename}.${archiveExtension.get()}"
-    }
+
+    // The Windows launcher always executes <repo>/grasscutter.jar. Keep the default jar task
+    // aligned with that runtime contract so a successful build cannot silently leave the launcher
+    // running an older jar. A custom name remains available through -PjarFilename=....
+    archiveFileName = project.hasProperty('jarFilename')
+            ? "${jarFilename}.${archiveExtension.get()}"
+            : 'grasscutter.jar'
 
     from {
         configurations.runtimeClasspath.collect {
