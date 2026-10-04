@@ -317,33 +317,32 @@ public final class GameServer extends KcpServer implements Iterable<Player> {
 
         var tickStart = Instant.now();
 
-        // Each of these is guarded on its own. One world or one player throwing used to abandon the
-        // whole tick, so everybody else's world stopped moving for reasons that had nothing to do
-        // with them - and the scheduler at the end never ran at all.
-        // Lock the home world cache before the world set. Logging in takes them in that order
-        // (computeIfAbsent builds a HomeWorld, which registers itself in the world set), so taking
-        // the world set first here deadlocked the tick against a login and froze the server.
-        synchronized (this.homeWorlds) {
-            this.worlds.removeIf(
-                    world -> {
-                        try {
-                            boolean shouldRemove = world.onTick();
-                            if (shouldRemove && world instanceof HomeWorld homeWorld) {
-                                // Home worlds are indexed separately from the world tick set.
-                                // Remove the same instance from that cache, otherwise the host
-                                // player and every loaded home scene stay strongly reachable after
-                                // the last player leaves.
-                                Player host = homeWorld.getHost();
-                                if (host != null) {
-                                    this.homeWorlds.remove(host.getUid(), homeWorld);
-                                }
-                            }
-                            return shouldRemove;
-                        } catch (Throwable e) {
-                            Grasscutter.getLogger().error("A world threw while ticking.", e);
-                            return false;
-                        }
-                    });
+        // Never hold the world/home-world collection locks while ticking a world. Scene 3 can do
+        // substantial script/entity work on a cold login; holding homeWorlds across that work blocks
+        // Player.onLogin at getHomeWorldOrCreate(), so PlayerLoginRsp is never sent before the client
+        // gives up and reconnects. Snapshot under the short collection lock, then tick independently.
+        List<World> worldSnapshot;
+        synchronized (this.worlds) {
+            worldSnapshot = new ArrayList<>(this.worlds);
+        }
+
+        for (World world : worldSnapshot) {
+            try {
+                boolean shouldRemove = world.onTick();
+                if (!shouldRemove || world.getPlayerCount() != 0) {
+                    continue;
+                }
+
+                if (world instanceof HomeWorld homeWorld) {
+                    // Re-check emptiness and remove the cached instance without keeping either
+                    // collection locked while world.onTick() is running.
+                    this.releaseHomeWorldIfEmpty(homeWorld);
+                } else {
+                    this.worlds.remove(world);
+                }
+            } catch (Throwable e) {
+                Grasscutter.getLogger().error("A world threw while ticking.", e);
+            }
         }
 
         this.players

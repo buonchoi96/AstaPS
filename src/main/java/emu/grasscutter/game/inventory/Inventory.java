@@ -301,12 +301,16 @@ public class Inventory extends BasePlayerManager implements Iterable<GameItem> {
                             WatcherTriggerType.TRIGGER_OBTAIN_MATERIAL_NUM,
                             result.getItemId(),
                             result.getCount());
-            getPlayer()
-                    .getActivityManager()
-                    .triggerWatcher(
-                            WatcherTriggerType.TRIGGER_OBTAIN_MATERIAL_NUM,
-                            String.valueOf(result.getItemId()),
-                            String.valueOf(result.getCount()));
+            // Fresh-account Traveler creation adds the starter weapon before ActivityManager is
+            // constructed later in Player.onLogin(). Do not turn that valid bootstrap ordering into
+            // a noisy NullPointerException; there is no activity watcher to notify yet.
+            var activityManager = getPlayer().getActivityManager();
+            if (activityManager != null) {
+                activityManager.triggerWatcher(
+                        WatcherTriggerType.TRIGGER_OBTAIN_MATERIAL_NUM,
+                        String.valueOf(result.getItemId()),
+                        String.valueOf(result.getCount()));
+            }
             getPlayer()
                     .getQuestManager()
                     .queueEvent(
