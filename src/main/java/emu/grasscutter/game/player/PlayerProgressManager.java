@@ -1168,10 +1168,15 @@ public final class PlayerProgressManager extends BasePlayerDataManager {
         areas.clear();
         areas.addAll(justified);
         this.player.save();
-        this.player.sendPacket(new PacketSceneAreaUnlockNotify(sceneId, justified));
+
+        // This method runs during Player.onLogin(), before PlayerEnterSceneNotify. 7.1 treats
+        // SceneAreaUnlockNotify as a live delta for an already-entered scene, not as the login
+        // snapshot. Emitting it here makes the client apply scene-3 area deltas while it is still
+        // constructing the scene-entry state machine. The authoritative snapshot is already served
+        // by GetScenePointRsp/GetSceneAreaRsp after the client asks for it.
         emu.grasscutter.Grasscutter.getLogger()
                 .debug(
-                        "Synced scene areas from points uid={} scene={} areas={}",
+                        "Synced scene areas from points uid={} scene={} areas={} (persisted; pre-entry notify suppressed)",
                         this.player.getUid(),
                         sceneId,
                         justified.size());
