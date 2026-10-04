@@ -9,6 +9,7 @@ import emu.grasscutter.game.Account;
 import emu.grasscutter.game.player.Player;
 import emu.grasscutter.net.packet.*;
 import emu.grasscutter.server.event.game.SendPacketEvent;
+import emu.grasscutter.server.game.re.BeyondReRecorder;
 import emu.grasscutter.utils.*;
 import io.netty.buffer.*;
 import java.io.File;
@@ -39,6 +40,7 @@ public class GameSession implements GameSessionManager.KcpChannel {
     @Getter private int clientTime;
     @Getter private long lastPingTime;
     private int lastClientSeq = 10;
+    private final String beyondReSessionId = java.util.UUID.randomUUID().toString();
 
     public GameSession(GameServer server) {
         this.server = server;
@@ -168,6 +170,11 @@ public class GameSession implements GameSessionManager.KcpChannel {
         if (!event.isCanceled()) {
             try {
                 packet = event.getPacket();
+                recordBeyondRePacket(
+                        BeyondReRecorder.Direction.S2C,
+                        packet.getOpcode(),
+                        packet.getHeader(),
+                        packet.getData());
                 var bytes = packet.build();
                 if (packet.shouldEncrypt) {
                     if (Grasscutter.getConfig().server.game.useXorEncryption) {
@@ -320,6 +327,7 @@ public class GameSession implements GameSessionManager.KcpChannel {
                     default -> {}
                 }
 
+                recordBeyondRePacket(BeyondReRecorder.Direction.C2S, opcode, header, payload);
                 getServer().getPacketHandler().handle(this, opcode, header, payload);
             }
         } catch (Throwable e) {
@@ -334,6 +342,42 @@ public class GameSession implements GameSessionManager.KcpChannel {
 
             packet.release();
         }
+    }
+
+    private void recordBeyondRePacket(
+            BeyondReRecorder.Direction direction, int opcode, byte[] header, byte[] payload) {
+        var options = GAME_INFO.beyondReRecorder;
+        if (options == null || !options.enabled) return;
+
+        Integer uid = this.getPlayer() == null ? null : this.getPlayer().getUid();
+        String endpoint = null;
+        try {
+            InetSocketAddress address = this.getAddress();
+            if (address != null) {
+                endpoint =
+                        (address.getAddress() == null
+                                        ? address.getHostString()
+                                        : address.getAddress().getHostAddress())
+                                + ":"
+                                + address.getPort();
+            }
+        } catch (Throwable ignored) {
+        }
+
+        Path outputRoot =
+                Path.of(
+                        options.outputDirectory == null || options.outputDirectory.isBlank()
+                                ? "debug/beyond-re"
+                                : options.outputDirectory);
+        BeyondReRecorder.record(
+                options,
+                outputRoot,
+                new BeyondReRecorder.SessionInfo(beyondReSessionId, uid, endpoint),
+                direction,
+                opcode,
+                PacketOpcodesUtils.getOpcodeName(opcode),
+                header,
+                payload);
     }
 
         @Override

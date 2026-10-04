@@ -260,6 +260,7 @@ public class ConfigContainer {
 
     public static class Game {
         public WatchdogOptions watchdog = new WatchdogOptions();
+        public BeyondReRecorderOptions beyondReRecorder = new BeyondReRecorderOptions();
 
         public String bindAddress = "0.0.0.0";
         public int bindPort = 22101;
@@ -315,6 +316,28 @@ public class ConfigContainer {
             new VisionOptions("VISION_LEVEL_NEARBY"         , 40    , 20),
             new VisionOptions("VISION_LEVEL_SUPER_NEARBY"   , 20    , 20)
         };
+    }
+
+    /**
+     * Explicit opt-in research recorder for decoded game packets.
+     *
+     * <p>Raw payloads can contain sensitive player data. Keep this disabled unless a capture is
+     * intentionally being collected for protocol research.
+     */
+    public static class BeyondReRecorderOptions {
+        public boolean enabled = false;
+        public boolean captureAllPackets = false;
+        public String outputDirectory = "debug/beyond-re";
+        public String[] watchNamePrefixes =
+                new String[] {"Beyond", "_Beyond", "GetBeyond", "_GetBeyond", "TakeBeyond", "_TakeBeyond"};
+        public int[] watchOpcodes =
+                new int[] {
+                    1971, 1660, 1986, 24272, 20869, 25221, 28882, 4555, 20707, 26819, 5825, 5257,
+                    25669
+                };
+        public int wireTreeMaxDepth = 4;
+        public int wireTreeMaxFields = 512;
+        public int wireTreeMaxNestedBytes = 64 * 1024;
     }
 
     /* Data containers. */

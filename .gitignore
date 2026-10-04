@@ -55,6 +55,7 @@ tmp/
 /cache
 /resources
 /logs
+/debug/beyond-re/
 /plugins
 /keys
 /language
