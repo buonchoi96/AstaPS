@@ -33,13 +33,28 @@ debug/beyond-re/
 ```
 
 Raw payload files are complete, named by SHA-256, and deduplicated. `packets.jsonl` contains
-direction, timestamps, session/player/endpoint context, opcode/name, header and payload lengths,
-PacketHead sequence/timestamp when parseable, the payload hash/path, decode status, redacted typed
-fields when a generated 7.1 message exists, and bounded generic protobuf wire trees. Nested
-length-delimited values that merely parse like protobuf are marked `CANDIDATE`.
+`recordId`, direction, timestamps, session/player/endpoint context, opcode/name, header and payload
+lengths, PacketHead sequence/timestamp when parseable, the payload hash/path, decode status,
+redacted typed fields when a generated 7.1 message exists, and bounded generic protobuf wire trees.
+Nested length-delimited values that merely parse like protobuf are marked `CANDIDATE`.
+
+`semantic-events.jsonl` is intentionally thinner. Each event carries the same `recordId` and
+`payloadSha256` as its source packet record so downstream tooling can join semantic observations
+back to `packets.jsonl` and then verify the exact bytes in `raw/<payloadSha256>.bin`. The currently
+verified semantic surface includes `BEYOND_PLAYER_PRESENCE` for `WorldPlayerInfoNotify`. Legacy UGC
+events remain explicitly `UGC_CANDIDATE_*` until a live 7.1 capture proves reuse.
 
 Semantic JSON never intentionally exposes passcodes, chat/report text, credential/token/session
 secrets. Redaction does not modify `raw/*.bin`; treat the raw directory as sensitive evidence.
 
 Delete a capture by stopping the server and removing its `debug/beyond-re/session-<id>` directory.
 The whole capture root is gitignored and must not be committed.
+
+## Downstream ingestion
+
+Future `miliastra-unified-mcp` ingestion should treat `packets.jsonl` as the packet index and raw
+SHA-256 artifacts as the evidence source of truth. Import `semantic-events.jsonl` only as derived
+annotations, join it through `recordId`, and preserve `payloadSha256` on every derived record. A
+wire-tree `CANDIDATE` node is structural evidence only; it must not be promoted to a typed field
+without a trustworthy 7.1 descriptor or corroborating live-client capture. Likewise,
+`UGC_CANDIDATE_*` labels must remain candidate evidence rather than writable Miliastra semantics.

@@ -48,7 +48,13 @@ public final class BeyondReSemantic {
 
     public static String semanticEvent(int opcode, String name) {
         // Deliberately candidate-labelled; this does not assert Miliastra protocol reuse.
-        return UGC_CANDIDATE_EVENTS.get(opcode);
+        String ugcCandidate = UGC_CANDIDATE_EVENTS.get(opcode);
+        if (ugcCandidate != null) return ugcCandidate;
+
+        // AstaPS now emits the verified 7.1 _BeyondPlayerInfo list in this notify.
+        if ("WorldPlayerInfoNotify".equals(name)) return "BEYOND_PLAYER_PRESENCE";
+
+        return null;
     }
 
     public static Map<String, Object> redactDecodedFields(Map<String, Object> decoded) {
@@ -56,7 +62,13 @@ public final class BeyondReSemantic {
         Map<String, Object> redacted = new LinkedHashMap<>();
         decoded.forEach(
                 (key, value) ->
-                        redacted.put(key, isSensitiveKey(key) ? "REDACTED" : redactValue(value)));
+                        redacted.put(
+                                key,
+                                isSensitiveKey(key)
+                                        ? "REDACTED"
+                                        : isObfuscatedKey(key)
+                                                ? redactUnknownText(value)
+                                                : redactValue(value)));
         return redacted;
     }
 
@@ -70,7 +82,9 @@ public final class BeyondReSemantic {
                                 textKey,
                                 isSensitiveKey(textKey)
                                         ? "REDACTED"
-                                        : redactValue(nestedValue));
+                                        : isObfuscatedKey(textKey)
+                                                ? redactUnknownText(nestedValue)
+                                                : redactValue(nestedValue));
                     });
             return nested;
         }
@@ -89,17 +103,43 @@ public final class BeyondReSemantic {
         return value;
     }
 
+    private static Object redactUnknownText(Object value) {
+        if (value instanceof CharSequence) return "REDACTED_UNKNOWN_TEXT";
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> nested = new LinkedHashMap<>();
+            map.forEach(
+                    (key, nestedValue) ->
+                            nested.put(String.valueOf(key), redactUnknownText(nestedValue)));
+            return nested;
+        }
+        if (value instanceof Iterable<?> iterable) {
+            List<Object> list = new ArrayList<>();
+            iterable.forEach(item -> list.add(redactUnknownText(item)));
+            return list;
+        }
+        if (value != null && value.getClass().isArray()) {
+            List<Object> list = new ArrayList<>();
+            for (int i = 0; i < Array.getLength(value); i++) {
+                list.add(redactUnknownText(Array.get(value, i)));
+            }
+            return list;
+        }
+        return value;
+    }
+
+    private static boolean isObfuscatedKey(String key) {
+        return key != null && key.length() >= 6 && key.chars().allMatch(Character::isUpperCase);
+    }
+
     private static boolean isSensitiveKey(String key) {
         if (key == null) return false;
         String normalized = key.toLowerCase(Locale.ROOT).replace('-', '_');
         return normalized.contains("passcode")
                 || normalized.contains("password")
                 || normalized.contains("credential")
-                || normalized.contains("access_token")
-                || normalized.contains("refresh_token")
-                || normalized.contains("auth_token")
-                || normalized.contains("session_token")
-                || normalized.contains("session_key")
+                || normalized.contains("token")
+                || normalized.contains("account")
+                || normalized.contains("session")
                 || normalized.contains("auth_key")
                 || normalized.contains("secret")
                 || normalized.contains("chat_text")

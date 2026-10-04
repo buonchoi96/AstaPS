@@ -346,59 +346,71 @@ public class GameSession implements GameSessionManager.KcpChannel {
 
     private void recordBeyondRePacket(
             BeyondReRecorder.Direction direction, int opcode, byte[] header, byte[] payload) {
-        var options = GAME_INFO.beyondReRecorder;
-        if (options == null || !options.enabled) return;
-
-        Integer uid = this.getPlayer() == null ? null : this.getPlayer().getUid();
-        String endpoint = null;
         try {
-            InetSocketAddress address = this.getAddress();
-            if (address != null) {
-                endpoint =
-                        (address.getAddress() == null
-                                        ? address.getHostString()
-                                        : address.getAddress().getHostAddress())
-                                + ":"
-                                + address.getPort();
-            }
-        } catch (Throwable ignored) {
-        }
+            var options = GAME_INFO.beyondReRecorder;
+            if (options == null || !options.enabled) return;
 
-        Path outputRoot =
-                Path.of(
-                        options.outputDirectory == null || options.outputDirectory.isBlank()
-                                ? "debug/beyond-re"
-                                : options.outputDirectory);
-        BeyondReRecorder.record(
-                options,
-                outputRoot,
-                new BeyondReRecorder.SessionInfo(beyondReSessionId, uid, endpoint),
-                direction,
-                opcode,
-                PacketOpcodesUtils.getOpcodeName(opcode),
-                header,
-                payload);
+            Integer uid = this.getPlayer() == null ? null : this.getPlayer().getUid();
+            String endpoint = null;
+            try {
+                InetSocketAddress address = this.getAddress();
+                if (address != null) {
+                    endpoint =
+                            (address.getAddress() == null
+                                            ? address.getHostString()
+                                            : address.getAddress().getHostAddress())
+                                    + ":"
+                                    + address.getPort();
+                }
+            } catch (Throwable ignored) {
+            }
+
+            Path outputRoot =
+                    Path.of(
+                            options.outputDirectory == null || options.outputDirectory.isBlank()
+                                    ? "debug/beyond-re"
+                                    : options.outputDirectory);
+            BeyondReRecorder.record(
+                    options,
+                    outputRoot,
+                    new BeyondReRecorder.SessionInfo(beyondReSessionId, uid, endpoint),
+                    direction,
+                    opcode,
+                    PacketOpcodesUtils.getOpcodeName(opcode),
+                    header,
+                    payload);
+        } catch (Throwable failure) {
+            try {
+                Grasscutter.getLogger()
+                        .debug(
+                                "Beyond RE hook skipped packet {}: {}",
+                                opcode,
+                                failure.toString());
+            } catch (Throwable ignored) {
+                // Research logging must never be able to fail a game session.
+            }
+        }
     }
 
-        @Override
-        public void handleClose() {
-            setState(SessionState.INACTIVE);
+    @Override
+    public void handleClose() {
+        setState(SessionState.INACTIVE);
 
-            Grasscutter.getLogger()
-                    .info(translate("messages.game.disconnect", this.getAddress().toString()));
+        Grasscutter.getLogger()
+                .info(translate("messages.game.disconnect", this.getAddress().toString()));
 
-            if (this.isLoggedIn()) {
-                Player player = getPlayer();
+        if (this.isLoggedIn()) {
+            Player player = getPlayer();
 
-                player.onLogout();
-            }
-            try {
-                send(new BasePacket(PacketOpcodes.ServerDisconnectClientNotify));
-            } catch (Throwable ignore) {
-                Grasscutter.getLogger().warn("closing {} error", getAddress().getAddress().getHostAddress());
-            }
-            tunnel = null;
+            player.onLogout();
         }
+        try {
+            send(new BasePacket(PacketOpcodes.ServerDisconnectClientNotify));
+        } catch (Throwable ignore) {
+            Grasscutter.getLogger().warn("closing {} error", getAddress().getAddress().getHostAddress());
+        }
+        tunnel = null;
+    }
 
     public void close() {
         // Already disconnected (a second login from the same account closes the first

@@ -103,6 +103,14 @@ public final class BeyondReRecorder {
         long monotonicNanos = System.nanoTime();
         long wallEpochMs = System.currentTimeMillis();
         String wallTime = Instant.ofEpochMilli(wallEpochMs).toString();
+        String recordId =
+                safeSessionId
+                        + ":"
+                        + Long.toUnsignedString(monotonicNanos)
+                        + ":"
+                        + direction.name()
+                        + ":"
+                        + opcode;
 
         synchronized (WRITE_LOCK) {
             Files.createDirectories(rawDir);
@@ -129,6 +137,7 @@ public final class BeyondReRecorder {
         }
 
         Map<String, Object> packet = new LinkedHashMap<>();
+        packet.put("recordId", recordId);
         packet.put("direction", direction.name());
         packet.put("monotonicNanos", monotonicNanos);
         packet.put("wallTime", wallTime);
@@ -182,6 +191,7 @@ public final class BeyondReRecorder {
                     StandardOpenOption.APPEND);
             if (semanticEvent != null) {
                 Map<String, Object> semantic = new LinkedHashMap<>();
+                semantic.put("recordId", recordId);
                 semantic.put("event", semanticEvent);
                 semantic.put("direction", direction.name());
                 semantic.put("sessionId", session.sessionId());

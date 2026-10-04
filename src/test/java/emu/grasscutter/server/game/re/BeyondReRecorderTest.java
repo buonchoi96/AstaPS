@@ -6,8 +6,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import emu.grasscutter.config.ConfigContainer;
 import emu.grasscutter.net.packet.PacketOpcodes;
+import emu.grasscutter.net.proto.BeyondPlayerInfo._BeyondPlayerInfo;
 import emu.grasscutter.net.proto.PacketHeadOuterClass.PacketHead;
 import emu.grasscutter.net.proto.PingReqOuterClass.PingReq;
+import emu.grasscutter.net.proto.WorldPlayerInfoNotifyOuterClass.WorldPlayerInfoNotify;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -104,6 +106,44 @@ class BeyondReRecorderTest {
     }
 
     @Test
+    void recordsVerifiedBeyondPresenceSemanticEventWithPacketRecordLink() throws Exception {
+        var options = options(true);
+        byte[] payload =
+                WorldPlayerInfoNotify.newBuilder()
+                        .addBeyondPlayerInfoList(
+                                _BeyondPlayerInfo.newBuilder()
+                                        .setUid(10005)
+                                        .setOnlineStateValue(1)
+                                        .setWorldTypeValue(0))
+                        .build()
+                        .toByteArray();
+
+        BeyondReRecorder.record(
+                options,
+                tempDir,
+                new BeyondReRecorder.SessionInfo("presence", 10005, null),
+                BeyondReRecorder.Direction.S2C,
+                PacketOpcodes.WorldPlayerInfoNotify,
+                "WorldPlayerInfoNotify",
+                new byte[0],
+                payload);
+
+        JsonObject packet = onlyPacket("presence");
+        assertEquals("KNOWN", packet.get("decodeStatus").getAsString());
+        assertEquals("BEYOND_PLAYER_PRESENCE", packet.get("semanticEvent").getAsString());
+
+        var semanticLines =
+                Files.readAllLines(sessionDir("presence").resolve("semantic-events.jsonl"));
+        assertEquals(1, semanticLines.size());
+        JsonObject semantic = JsonParser.parseString(semanticLines.get(0)).getAsJsonObject();
+        assertEquals("BEYOND_PLAYER_PRESENCE", semantic.get("event").getAsString());
+        assertEquals(packet.get("recordId").getAsString(), semantic.get("recordId").getAsString());
+        assertEquals(
+                packet.get("payloadSha256").getAsString(),
+                semantic.get("payloadSha256").getAsString());
+    }
+
+    @Test
     void persistsLargePayloadWithoutTruncation() throws Exception {
         var options = options(true);
         byte[] payload = new byte[512 * 1024 + 17];
@@ -178,6 +218,9 @@ class BeyondReRecorderTest {
                         "uid", 12345,
                         "hall_passcode", "hunter2",
                         "chat_text", "private chat body",
+                        "account_id", "account-123",
+                        "session_id", "session-456",
+                        "ABCDEFGHIJK", "unknown private text",
                         "nested",
                                 Map.of(
                                         "access_token", "token-abc",
@@ -189,6 +232,9 @@ class BeyondReRecorderTest {
         assertEquals(12345, redacted.get("uid"));
         assertFalse(json.contains("hunter2"));
         assertFalse(json.contains("private chat body"));
+        assertFalse(json.contains("account-123"));
+        assertFalse(json.contains("session-456"));
+        assertFalse(json.contains("unknown private text"));
         assertFalse(json.contains("token-abc"));
         assertTrue(json.contains("safe-name"));
         assertTrue(json.contains("REDACTED"));
