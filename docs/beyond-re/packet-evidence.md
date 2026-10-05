@@ -32,8 +32,8 @@ used as semantic-name references only; their field numbers are not accepted as 7
 
 | Packet/system | 7.1 CmdId | Typed 7.1 schema in AstaPS | Existing handler/response | Confidence | Action |
 |---|---:|---|---|---|---|
-| `_GetBeyondPlayerInfoReq` | 5960 | Named Req wrapper not present | none | opcode high, wrapper unknown | **Deferred/raw-only**; no typed handler without a verified 7.1 wrapper |
-| `_GetBeyondPlayerInfoRsp` | 9779 | Named Rsp wrapper not present | none | opcode high, wrapper unknown | **Deferred/raw-only**; presence is emitted through verified `WorldPlayerInfoNotify` structures instead |
+| `_GetBeyondPlayerInfoReq` | 5960 | Named Req wrapper not present | LunaGC 7.1 sends empty Rsp | high for empty request handling | Implement the reference-backed empty response; no request fields are decoded |
+| `_GetBeyondPlayerInfoRsp` | 9779 | Named Rsp wrapper not present | LunaGC 7.1 empty body | high for empty body | Send empty proto3 body while preserving the request client sequence |
 | `WorldPlayerInfoNotify` Beyond list | 2076 | yes | notify exists but omits Beyond list | high | Implement typed `_BeyondPlayerInfo` population |
 | `_BeyondCreateHallReq/Rsp` | 26704 / 2767 | Named wrappers not present | none | opcodes high, payload shape unresolved | **Deferred/raw-only**; deterministic Hall lifecycle is not implemented without typed 7.1 payload evidence |
 | `_BeyondHallChangeAuthModeReq/Rsp/Notify` | 28720 / 22055 / 4532 | Named wrappers not present | none | opcodes high, payload shape unresolved | **Deferred/raw-only**; no inferred field numbers |
@@ -54,7 +54,6 @@ Implemented on `agent/protocol-handlers`:
 
 Intentionally not implemented because typed 7.1 request/response payload evidence is missing:
 
-- `_GetBeyondPlayerInfoReq/Rsp` handlers;
 - Hall create/auth/tag lifecycle handlers and GUID/passcode semantics;
 - BGM request handling (request CmdId remains unknown);
 - Beyond social/detail request handlers where the request CmdId is non-positive/unknown;
@@ -62,6 +61,14 @@ Intentionally not implemented because typed 7.1 request/response payload evidenc
 
 These paths remain recorder/raw-wire work until a live 7.1 capture or trustworthy 7.1 descriptor
 establishes the missing payload shapes. No 6.x field number is promoted into 7.1.
+
+Additional 7.1 reference evidence found during live-test preparation:
+
+- LunaGC revision `811b224db150982be37c0619e1506d980443cb9b` contains
+  `HandlerGetBeyondPlayerInfoReq`, introduced by
+  `ac7144a0ce6d8ef855fbe630aa92c07b903f47da`. It handles CmdId 5960 by returning CmdId 9779
+  with an empty proto3 body and the request's client sequence. AstaPS now mirrors exactly that
+  narrow behavior; it still does not invent a typed Req/Rsp wrapper or any unresolved field.
 
 ## Baseline build/test evidence
 
