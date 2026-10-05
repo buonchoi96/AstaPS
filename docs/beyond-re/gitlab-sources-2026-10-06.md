@@ -146,6 +146,15 @@ The default integration test starts another real server and was not rerun alongs
 managed server; an earlier run was stopped to avoid a port collision. The existing formatter
 fails on JDK 21 `JCImport.getQualifiedIdentifier`; no formatter success is claimed.
 
+A managed `beyond-integration-audit` checkout independently compiled the committed sources.
+Its first `./gradlew.bat test -PexcludeTags=integration --no-daemon --max-workers=1` run exited
+before assertions: logger initialization invokes `Utils.startupCheck()`, which calls
+`System.exit(1)` when the gitignored resource directories are absent. Logs identified the
+missing `BinOutput`/`ExcelBinOutput`; this guard is unchanged relative to upstream. Creating
+empty ignored `resources/BinOutput`, `ExcelBinOutput`, `Server`, and `ScriptSceneData` directories
+allowed the same command to finish: **145 tests, 0 failures, 0 errors; BUILD SUCCESSFUL in 13s**.
+No game resource files or live database were copied into that checkout; Git status remained clean.
+
 Older manifests incorrectly labelled fork integration base `7e92571033dffb723bd708ba222981f10d073761`
 as upstream base. Those captures remain unchanged. Later runs correctly use actual upstream
 merge-base `0fac870873a35e88b9f969aa1b242a832b602005`. Build/proto confidence metadata is recorded
