@@ -38,6 +38,12 @@ lengths, PacketHead sequence/timestamp when parseable, the payload hash/path, de
 redacted typed fields when a generated 7.1 message exists, and bounded generic protobuf wire trees.
 Nested length-delimited values that merely parse like protobuf are marked `CANDIDATE`.
 
+The recovered 5960/9779 presence wrappers use pinned 7.1 dynamic descriptors. Corrected
+`_MapLayerInfo` semantic names follow wire fields 2/7 instead of the reversed generated Java
+names; older captures are not rewritten. New manifests include proto source revisions, confidence
+notes, and `buildTimestamp` from `-Dgrasscutter.build.timestamp=<UTC build time>` when supplied.
+Missing build/commit provenance is recorded as `unknown`, not inferred from file modification time.
+
 When a Req/Rsp PacketHead carries a non-zero client sequence, `requestCorrelationId` is written as
 `<session-id>:<client-sequence>` on both sides so a response that preserves the request sequence
 can be paired directly with its request. Notifications intentionally do not get this pair key,

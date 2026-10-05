@@ -185,3 +185,25 @@ establish response pairings for the live unnamed lobby/editor bootstrap requests
 Hall metadata plus the actual Hall scene transition from the newly available 7.1 contracts.
 The task remains partially complete: Hall/editor/Play Test are not working, even though the
 recorder and populated presence RPC now have tested implementations.
+
+## Integrated continuation commit list
+
+Commits through the initial reference-audit documentation commit:
+
+```text
+f38c23bbf88d4bfafd1c33af0a31addba0ebeec1 fix(scene): align world limited regions with LunaGC
+587587d1de122f1bc53cb26d1a803ff616ff4e95 fix(beyond): preserve sequence on reference-backed player info response
+9d25e8849a62fe3f08ba3d7846edc8efcd22371c feat(re): correlate Beyond request response debug traces
+37c7d25919d7507f8078268426805f90cd945489 docs(re): audit live unknown opcodes and controlled UI evidence
+0a71c3d2603b231e59fe52f464bc23801997e7ab fix(re): capture bootstrap presence in opt-in watch mode
+ebc30779f4c8719b37a8aedfcfea42a58cca6eb8 fix(re): redact generated chat text without changing raw evidence
+0b96b3048a52c620573295c42aea5dd12094917b test(re): cover unknown opcodes and malformed packet headers
+8bcc1d6182fa3d5e5ebfcb65e98efeba168411a0 fix(re): redact authkey across normalized field spellings
+4afb55a4b1769493ee7cf80e8ff677be6ba5f7df fix(scene): filter response areas without persisting unlock cleanup
+35afeccf9949d170ebc54527595bb98a00cfff67 fix(protocol): correlate existing authkey error response with request
+d5a7bbaa81ffd2995904e4c1fe2c7d0ae95333bd fix(logging): require explicit payload option for unhandled hex
+384c395a7216f4bc7a4a57a7c4d0351d9d8ee704 fix(logging): remove credential prefixes from combo diagnostics
+11f310154262932bafbe70037af76375d3cafe0a fix(protocol): align map layer lists with corrected 7.1 wire schema
+76f62572b95632e9e433e785bda95c79a3fae5c5 feat(beyond): answer presence queries using recovered 7.1 schema
+702f9fde6d6fb15882831846255922efea545848 docs(re): audit GitLab 7.1 schemas data and live validation
+```

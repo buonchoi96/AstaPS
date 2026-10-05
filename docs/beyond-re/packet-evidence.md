@@ -3,9 +3,14 @@
 This branch implements only protocol behavior supported by 7.1 evidence. Older protocol dumps are
 used as semantic-name references only; their field numbers are not accepted as 7.1 ground truth.
 
+The [2026-10-06 GitLab audit](gitlab-sources-2026-10-06.md) supersedes the original
+missing-wrapper findings below. It documents the recovered presence/Hall schemas, applied
+presence response, corrected map-layer wire mapping, and remaining live bootstrap blockers.
+
 ## Reference revisions
 
-- AstaPS upstream base: `7e92571033dffb723bd708ba222981f10d073761`
+- AstaPS fork integration base: `7e92571033dffb723bd708ba222981f10d073761`
+- Actual integrated upstream merge-base: `0fac870873a35e88b9f969aa1b242a832b602005`
 - LunaGC 7.1: `811b224db150982be37c0619e1506d980443cb9b`
 - genshin-protocol semantic reference: `15eba9972a0a751f097b357a621dd3245cd158a8`
 - NahidaImpact secondary reference: `1d0f662dbc163543b96cadebc0b070a861a24ea1`
@@ -32,8 +37,8 @@ used as semantic-name references only; their field numbers are not accepted as 7
 
 | Packet/system | 7.1 CmdId | Typed 7.1 schema in AstaPS | Existing handler/response | Confidence | Action |
 |---|---:|---|---|---|---|
-| `_GetBeyondPlayerInfoReq` | 5960 | Named Req wrapper not present | LunaGC 7.1 sends empty Rsp | high for empty request handling | Implement the reference-backed empty response; no request fields are decoded |
-| `_GetBeyondPlayerInfoRsp` | 9779 | Named Rsp wrapper not present | LunaGC 7.1 empty body | high for empty body | Send empty proto3 body while preserving the request client sequence |
+| `_GetBeyondPlayerInfoReq` | 5960 | Recovered 7.1 dynamic descriptor | Populated Rsp handler | reference-backed; live RPC pending | Decode UID field 14 and reason field 10 |
+| `_GetBeyondPlayerInfoRsp` | 9779 | Recovered 7.1 dynamic descriptor | Controlled presence response | reference-backed; live RPC pending | Populate presence field 2, echo reason field 3 and request sequence |
 | `WorldPlayerInfoNotify` Beyond list | 2076 | yes | notify exists but omits Beyond list | high | Implement typed `_BeyondPlayerInfo` population |
 | `_BeyondCreateHallReq/Rsp` | 26704 / 2767 | Named wrappers not present | none | opcodes high, payload shape unresolved | **Deferred/raw-only**; deterministic Hall lifecycle is not implemented without typed 7.1 payload evidence |
 | `_BeyondHallChangeAuthModeReq/Rsp/Notify` | 28720 / 22055 / 4532 | Named wrappers not present | none | opcodes high, payload shape unresolved | **Deferred/raw-only**; no inferred field numbers |
@@ -43,7 +48,7 @@ used as semantic-name references only; their field numbers are not accepted as 7
 | `_GetBeyondPlayerDetailReq/Rsp` | unknown / 4162 | named request/response pair not established | none | response opcode only | Defer request; capture response if observed |
 | candidate `UgcDungeon*` watch set | known candidate IDs | varies | unrelated legacy surface | candidate only | Watch/capture only; do not label as Miliastra reuse |
 
-## Final Subagent A implementation boundary
+## Original Subagent A implementation boundary
 
 Implemented on `agent/protocol-handlers`:
 
@@ -52,7 +57,8 @@ Implemented on `agent/protocol-handlers`:
 - in-memory presence resolution for players already known to be in a live world;
 - `WorldPlayerInfoNotify` population of the verified repeated `_BeyondPlayerInfo` field 13.
 
-Intentionally not implemented because typed 7.1 request/response payload evidence is missing:
+At the original handoff, these were not implemented because typed 7.1 payload evidence was missing
+(see the later GitLab audit for newly recovered contracts):
 
 - Hall create/auth/tag lifecycle handlers and GUID/passcode semantics;
 - BGM request handling (request CmdId remains unknown);
@@ -67,8 +73,8 @@ Additional 7.1 reference evidence found during live-test preparation:
 - LunaGC revision `811b224db150982be37c0619e1506d980443cb9b` contains
   `HandlerGetBeyondPlayerInfoReq`, introduced by
   `ac7144a0ce6d8ef855fbe630aa92c07b903f47da`. It handles CmdId 5960 by returning CmdId 9779
-  with an empty proto3 body and the request's client sequence. AstaPS now mirrors exactly that
-  narrow behavior; it still does not invent a typed Req/Rsp wrapper or any unresolved field.
+  with an empty proto3 body and the request's client sequence. AstaPS originally mirrored that
+  narrow behavior. The recovered GitLab 7.1 wrappers now permit the populated response described above.
 
 ## Baseline build/test evidence
 
