@@ -210,7 +210,10 @@ public final class GameServerPacketHandler {
                 return;
             }
             String hex = "";
-            if (payload != null && payload.length > 0 && payload.length <= 128) {
+            if (GAME_INFO.isShowPacketPayload
+                    && payload != null
+                    && payload.length > 0
+                    && payload.length <= 128) {
                 StringBuilder sb = new StringBuilder(payload.length * 2);
                 for (byte b : payload) {
                     sb.append(String.format("%02x", b));
