@@ -241,6 +241,85 @@ class BeyondReRecorderTest {
     }
 
     @Test
+    void classifiesBeyondConsolePacketRolesWithoutGuessingSemantics() {
+        assertEquals("REQ", BeyondReSemantic.packetKind("_UgcDungeonSaveDataReq"));
+        assertEquals("RSP", BeyondReSemantic.packetKind("_UgcEnterDungeonRsp"));
+        assertEquals("NOTIFY", BeyondReSemantic.packetKind("_BeyondHallChangeTagsNotify"));
+        assertEquals("OTHER", BeyondReSemantic.packetKind("UNKNOWN"));
+        assertEquals("OTHER", BeyondReSemantic.packetKind(null));
+    }
+
+    @Test
+    void pairsReqAndRspBySequenceWithoutPairingNotifications() throws Exception {
+        var options = options(true);
+        byte[] header =
+                PacketHead.newBuilder()
+                        .setClientSequenceId(73)
+                        .setSentMs(1_234_567_891L)
+                        .build()
+                        .toByteArray();
+        var session = new BeyondReRecorder.SessionInfo("pairing", 10006, null);
+
+        BeyondReRecorder.record(
+                options,
+                tempDir,
+                session,
+                BeyondReRecorder.Direction.C2S,
+                1971,
+                "_UgcEnterDungeonReq",
+                header,
+                new byte[] {0x08, 0x01});
+        BeyondReRecorder.record(
+                options,
+                tempDir,
+                session,
+                BeyondReRecorder.Direction.S2C,
+                1660,
+                "_UgcEnterDungeonRsp",
+                header,
+                new byte[0]);
+        BeyondReRecorder.record(
+                options,
+                tempDir,
+                session,
+                BeyondReRecorder.Direction.S2C,
+                5825,
+                "_UgcDungeonPlayRecordNotify",
+                header,
+                new byte[0]);
+
+        List<String> lines =
+                Files.readAllLines(sessionDir("pairing").resolve("packets.jsonl"));
+        assertEquals(3, lines.size());
+        JsonObject req = JsonParser.parseString(lines.get(0)).getAsJsonObject();
+        JsonObject rsp = JsonParser.parseString(lines.get(1)).getAsJsonObject();
+        JsonObject notify = JsonParser.parseString(lines.get(2)).getAsJsonObject();
+
+        assertEquals(73, BeyondReRecorder.clientSequenceId(header));
+        assertEquals("pairing:73", req.get("requestCorrelationId").getAsString());
+        assertEquals(
+                req.get("requestCorrelationId").getAsString(),
+                rsp.get("requestCorrelationId").getAsString());
+        assertFalse(notify.has("requestCorrelationId"));
+        assertNotEquals(
+                req.get("correlationId").getAsString(), rsp.get("correlationId").getAsString());
+    }
+
+    @Test
+    void watchesWholeUgcDungeonFamilyWithoutCapturingUnrelatedUgcByName() {
+        var options = options(true);
+        options.captureAllPackets = false;
+        options.watchOpcodes = new int[0];
+        options.watchNamePrefixes = new String[0];
+
+        assertTrue(BeyondReSemantic.isWatched(options, 1, "EditUgcDungeonNotify"));
+        assertTrue(BeyondReSemantic.isWatched(options, 2, "_UgcDungeonSaveDataReq"));
+        assertTrue(BeyondReSemantic.isWatched(options, 3, "_UgcEnterDungeonRsp"));
+        assertFalse(BeyondReSemantic.isWatched(options, 4, "GetUgcReq"));
+        assertFalse(BeyondReSemantic.isWatched(options, 5, "MusicGameCreateBeatmapReq"));
+    }
+
+    @Test
     void rawPayloadHashMatchesPersistedBytesAndIsDeduplicated() throws Exception {
         var options = options(true);
         byte[] payload = "same raw payload".getBytes(java.nio.charset.StandardCharsets.UTF_8);

@@ -181,6 +181,10 @@ public final class BeyondReRecorder {
                                 + ":"
                                 + packetHead.clientSequenceId();
         putIfNotNull(packet, "correlationId", correlationId);
+        String requestCorrelationId =
+                BeyondReSemantic.requestCorrelationId(
+                        session.sessionId(), name, packetHead.clientSequenceId());
+        putIfNotNull(packet, "requestCorrelationId", requestCorrelationId);
 
         synchronized (WRITE_LOCK) {
             Files.writeString(
@@ -199,6 +203,7 @@ public final class BeyondReRecorder {
                 semantic.put("name", name);
                 semantic.put("payloadSha256", payloadSha256);
                 putIfNotNull(semantic, "correlationId", correlationId);
+                putIfNotNull(semantic, "requestCorrelationId", requestCorrelationId);
                 Files.writeString(
                         sessionDir.resolve("semantic-events.jsonl"),
                         GSON.toJson(semantic) + System.lineSeparator(),
@@ -260,6 +265,12 @@ public final class BeyondReRecorder {
         } catch (Throwable ignored) {
             return new PacketHeadMetadata(null, null);
         }
+    }
+
+    /** Returns the PacketHead client sequence for live console correlation, or null if unavailable. */
+    public static Integer clientSequenceId(byte[] header) {
+        if (header == null) return null;
+        return parsePacketHead(header).clientSequenceId();
     }
 
     private static TypedDecode decodeTyped(String name, byte[] payload) {

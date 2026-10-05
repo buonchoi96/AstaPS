@@ -10,6 +10,7 @@ import emu.grasscutter.game.player.Player;
 import emu.grasscutter.net.packet.*;
 import emu.grasscutter.server.event.game.SendPacketEvent;
 import emu.grasscutter.server.game.re.BeyondReRecorder;
+import emu.grasscutter.server.game.re.BeyondReSemantic;
 import emu.grasscutter.utils.*;
 import io.netty.buffer.*;
 import java.io.File;
@@ -370,13 +371,35 @@ public class GameSession implements GameSessionManager.KcpChannel {
                             options.outputDirectory == null || options.outputDirectory.isBlank()
                                     ? "debug/beyond-re"
                                     : options.outputDirectory);
+            String packetName = PacketOpcodesUtils.getOpcodeName(opcode);
+            if (BeyondReSemantic.isWatched(options, opcode, packetName)) {
+                Integer clientSequenceId = BeyondReRecorder.clientSequenceId(header);
+                String requestCorrelationId =
+                        BeyondReSemantic.requestCorrelationId(
+                                beyondReSessionId, packetName, clientSequenceId);
+                Grasscutter.getLogger()
+                        .debug(
+                                "[BeyondRE] {} {} {} ({}) uid={} session={} seq={} pair={} header={} payload={}",
+                                direction,
+                                BeyondReSemantic.packetKind(packetName),
+                                packetName,
+                                opcode,
+                                uid == null ? "pre-login" : uid,
+                                beyondReSessionId,
+                                clientSequenceId == null
+                                        ? "-"
+                                        : Integer.toUnsignedString(clientSequenceId),
+                                requestCorrelationId == null ? "-" : requestCorrelationId,
+                                header == null ? 0 : header.length,
+                                payload == null ? 0 : payload.length);
+            }
             BeyondReRecorder.record(
                     options,
                     outputRoot,
                     new BeyondReRecorder.SessionInfo(beyondReSessionId, uid, endpoint),
                     direction,
                     opcode,
-                    PacketOpcodesUtils.getOpcodeName(opcode),
+                    packetName,
                     header,
                     payload);
         } catch (Throwable failure) {

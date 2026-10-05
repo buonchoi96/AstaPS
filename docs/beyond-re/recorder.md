@@ -38,6 +38,12 @@ lengths, PacketHead sequence/timestamp when parseable, the payload hash/path, de
 redacted typed fields when a generated 7.1 message exists, and bounded generic protobuf wire trees.
 Nested length-delimited values that merely parse like protobuf are marked `CANDIDATE`.
 
+When a Req/Rsp PacketHead carries a non-zero client sequence, `requestCorrelationId` is written as
+`<session-id>:<client-sequence>` on both sides so a response that preserves the request sequence
+can be paired directly with its request. Notifications intentionally do not get this pair key,
+because independently generated server sequence numbers may overlap client request sequences. The
+live DEBUG trace prints the same sequence and pair key with the `[BeyondRE]` prefix.
+
 `semantic-events.jsonl` is intentionally thinner. Each event carries the same `recordId` and
 `payloadSha256` as its source packet record so downstream tooling can join semantic observations
 back to `packets.jsonl` and then verify the exact bytes in `raw/<payloadSha256>.bin`. The currently

@@ -38,6 +38,12 @@ public final class BeyondReSemantic {
         }
 
         String packetName = name == null ? "" : name;
+        // BeyondEditor packet names observed in protocol dumps are not consistently prefixed
+        // (for example EditUgcDungeon* vs UgcDungeon*). In explicit research mode, watch the
+        // whole UGC-dungeon family by name without broadening capture to unrelated music UGC.
+        if (packetName.contains("UgcDungeon") || packetName.contains("UgcEnterDungeon")) {
+            return true;
+        }
         if (options.watchNamePrefixes != null) {
             for (String prefix : options.watchNamePrefixes) {
                 if (prefix != null && !prefix.isEmpty() && packetName.startsWith(prefix)) return true;
@@ -55,6 +61,34 @@ public final class BeyondReSemantic {
         if ("WorldPlayerInfoNotify".equals(name)) return "BEYOND_PLAYER_PRESENCE";
 
         return null;
+    }
+
+    /** Human-readable packet role used by the live Beyond RE console trace. */
+    public static String packetKind(String name) {
+        if (name == null || name.isBlank()) return "OTHER";
+        if (name.endsWith("Req")) return "REQ";
+        if (name.endsWith("Rsp")) return "RSP";
+        if (name.endsWith("Notify")) return "NOTIFY";
+        return "OTHER";
+    }
+
+    /**
+     * Direction-neutral key for pairing one request with its response when both preserve the
+     * PacketHead client sequence.
+     *
+     * <p>This is deliberately separate from the recorder's historical {@code correlationId},
+     * which is directional and therefore identifies an individual wire-side observation rather
+     * than a Req/Rsp pair. Notifications are excluded because server-generated notification
+     * sequence numbers can legitimately overlap client request sequences.
+     */
+    public static String requestCorrelationId(String sessionId, String name, Integer clientSequenceId) {
+        if (sessionId == null || sessionId.isBlank() || clientSequenceId == null || clientSequenceId == 0) {
+            return null;
+        }
+
+        String kind = packetKind(name);
+        if (!"REQ".equals(kind) && !"RSP".equals(kind)) return null;
+        return sessionId + ":" + Integer.toUnsignedString(clientSequenceId);
     }
 
     public static Map<String, Object> redactDecodedFields(Map<String, Object> decoded) {
