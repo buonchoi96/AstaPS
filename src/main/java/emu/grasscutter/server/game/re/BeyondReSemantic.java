@@ -178,7 +178,7 @@ public final class BeyondReSemantic {
                 || normalized.contains("token")
                 || normalized.contains("account")
                 || normalized.contains("session")
-                || normalized.contains("auth_key")
+                || normalized.replace("_", "").contains("authkey")
                 || normalized.contains("secret")
                 || normalized.contains("chat_text")
                 || normalized.contains("chat_content")
