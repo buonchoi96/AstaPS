@@ -27,7 +27,7 @@ public class PacketPlayerWorldSceneInfoListNotify extends BasePacket {
                             .setSceneId(scene)
                             .setIsLocked(false)
                             .setLimitedRegionInfo(
-                                    emu.grasscutter.game.world.WorldRegions.unrestricted());
+                                    emu.grasscutter.game.world.WorldRegions.openRegions(scene));
 
             /** Add scene-specific data */
 
