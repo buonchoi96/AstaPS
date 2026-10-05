@@ -44,6 +44,8 @@ public final class BeyondReSemantic {
         if (packetName.contains("UgcDungeon") || packetName.contains("UgcEnterDungeon")) {
             return true;
         }
+        // Bootstrap Beyond presence is carried by this world notify, outside the Beyond prefixes.
+        if ("WorldPlayerInfoNotify".equals(packetName)) return true;
         if (options.watchNamePrefixes != null) {
             for (String prefix : options.watchNamePrefixes) {
                 if (prefix != null && !prefix.isEmpty() && packetName.startsWith(prefix)) return true;
