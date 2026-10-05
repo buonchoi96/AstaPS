@@ -77,7 +77,18 @@ public class HandlerEnterSceneDoneReq extends PacketHandler {
         // commission is issued and tracked but its monsters never spawn.
         var dailyTaskManager = player.getDailyTaskManager();
         if (dailyTaskManager != null) {
+            // Deferred from Player.onLogin so no DailyTaskDataNotify or commission generation can
+            // perturb the 7.1 pre-entry handshake.
+            dailyTaskManager.onPlayerLogin();
             dailyTaskManager.loadActiveGroups(player.getScene());
+        }
+
+        // Combine recipe convenience unlocks are likewise not part of LunaGC's pre-entry snapshot.
+        try {
+            player.getServer().getCombineSystem().onPlayerLogin(player);
+        } catch (Throwable t) {
+            Grasscutter.getLogger()
+                    .warn("Deferred combine login sync failed uid={}: {}", player.getUid(), t.toString());
         }
 
         // Reset timer for sending player locations

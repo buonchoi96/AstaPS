@@ -1517,11 +1517,9 @@ public class Player implements PlayerHook, FieldFetch {
         session.send(new PacketAvatarDataNotify(this));
 
         this.getProgressManager().onPlayerLogin();
-        try {
-            emu.grasscutter.game.player.DomainHandbookHelper.onPlayerLogin(this);
-        } catch (Throwable ignored) {
-        }
 
+        // Keep the pre-entry login snapshot aligned with LunaGC 7.1. Domain handbook unlocks
+        // and investigation handbook notifies are deferred until EnterSceneDoneReq.
         session.send(new PacketFinishedParentQuestNotify(this));
         session.send(new PacketBattlePassAllDataNotify(this));
         session.send(new PacketQuestListNotify(this));
@@ -1532,9 +1530,8 @@ public class Player implements PlayerHook, FieldFetch {
         this.achievements.onLogin(this);
 
         session.send(new PacketWidgetGadgetAllDataNotify());
-        // Re-attach follower pet ability group after widget slot is restored
-        WidgetPetHelper.syncEquippedWidget(this);
-        this.getServer().getCombineSystem().onPlayerLogin(this);
+        // Follower-pet abilities are re-applied in HandlerSceneInitFinishReq after the scene
+        // ability block exists. Combine recipe convenience unlocks are deferred to EnterSceneDoneReq.
         session.send(new PacketCombineDataNotify(this.unlockedCombines));
         session.send(new PacketGetChatEmojiCollectionRsp(this.getChatEmojiIdList()));
         this.forgingManager.sendForgeDataNotify();
@@ -1543,10 +1540,9 @@ public class Player implements PlayerHook, FieldFetch {
         this.cookingCompoundManager.onPlayerLogin();
         this.teamManager.onPlayerLogin();
 
-        // Idempotent, and not merely a null check: the load is submitted to the pool and nothing
-        // waits on it, so skipping here would silently cost the player a day of commissions.
+        // Load persisted commission state now, but do not generate/sync commission packets until
+        // EnterSceneDoneReq. LunaGC's working pre-entry path has no DailyTaskDataNotify here.
         this.loadDailyTaskManager();
-        this.dailyTaskManager.onPlayerLogin();
 
         // The client is told nothing about these on its own - they exist only as a forged notify,
         // so a relog has to re-assert them or the quests come back unfinished.

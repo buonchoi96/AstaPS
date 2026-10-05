@@ -73,6 +73,15 @@ public final class DomainHandbookHelper {
             ensureLoaded();
             applyUnlocks(player);
             syncToClient(player, "enter-scene");
+
+            // Investigation handbook packets used to be emitted from Player.onLogin before
+            // PlayerEnterSceneNotify. Keep the feature, but only after scene entry is complete.
+            try {
+                InvestigationHandbookHelper.onPlayerLogin(player);
+            } catch (Throwable t) {
+                Grasscutter.getLogger()
+                        .warn("InvestigationHandbook deferred scene sync failed: {}", t.toString());
+            }
         } catch (Throwable t) {
             Grasscutter.getLogger().warn("DomainHandbook enter-scene failed: {}", t.toString());
         }
