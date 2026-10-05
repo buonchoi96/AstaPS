@@ -84,6 +84,8 @@ public class Scene {
     private int lastReportedSceneTime = Integer.MIN_VALUE;
     private String lastReportedFrozenState = null;
     @Getter protected int tickCount = 0;
+    private long lastTimeNotify = 0;
+    private long lastStreamCheck = 0;
     @Getter private boolean isPaused = false;
 
     private final List<Runnable> afterLoadedCallbacks = new ArrayList<>();
@@ -773,12 +775,22 @@ public class Scene {
             this.getScheduler().runTasks();
         }
 
-        if (this.getScriptManager().isInit()) {
-
-            this.checkGroups();
-        } else {
-
-            this.checkSpawns();
+        // LunaGC 7.1: do not run dumped-spawn fallback while scene scripts are merely still
+        // loading. Script init runs asynchronously; isInit()==false alone cannot distinguish
+        // "no scripts for this scene" from "scripts have not finished loading yet". Running
+        // checkSpawns() in that window duplicates monsters/gadgets against the scripted copies
+        // and can flood a client that is still in SceneLoadState.LOADING.
+        //
+        // Scene streaming also does not need the full world tick rate. Check nearby groups/spawns
+        // at most twice per second, matching LunaGC's working 7.1 behavior.
+        var nowMs = System.currentTimeMillis();
+        if (nowMs - this.lastStreamCheck >= 500L) {
+            this.lastStreamCheck = nowMs;
+            if (this.getScriptManager().isInit()) {
+                this.checkGroups();
+            } else if (this.getScriptManager().isInitAttempted()) {
+                this.checkSpawns();
+            }
         }
 
         this.scriptManager.checkRegions();
@@ -815,8 +827,15 @@ public class Scene {
 
         this.finishLoading();
         this.checkPlayerRespawn();
+
         if (this.tickCount % 50 == 0) this.reportFrozenState();
-        if (this.tickCount++ % 10 == 0) this.broadcastPacket(new PacketSceneTimeNotify(this));
+        this.tickCount++;
+
+        var now = System.currentTimeMillis();
+        if (now - this.lastTimeNotify >= 10_000L) {
+            this.lastTimeNotify = now;
+            this.broadcastPacket(new PacketSceneTimeNotify(this));
+        }
     }
 
     /**
