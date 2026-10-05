@@ -1218,6 +1218,28 @@ public class Scene {
 
         this.onLoadGroup(toLoad);
         if (!toLoad.isEmpty()) this.onRegisterGroups();
+
+        // Keep the pre-SceneInitFinish streaming path aligned with LunaGC 7.1.
+        //
+        // The helpers below are AstaPS-only extensions. Several of them call scene.addEntity(),
+        // loadGroupFromScript(), or broadcast SceneEntityAppear/MonsterForceAlert packets. Running
+        // them while a player is still LOADING injects live world deltas into the client before it
+        // has completed the normal EnterSceneReady -> SceneInitFinish handshake. LunaGC does not
+        // have these helpers on its scene bootstrap path.
+        //
+        // Defer only the custom extensions; the ordinary scripted groups above still load exactly
+        // as they do in LunaGC. As soon as every player in the scene is LOADED, the next stream
+        // tick runs the helpers normally.
+        boolean customStreamingReady =
+                this.getPlayers().stream()
+                        .allMatch(
+                                player ->
+                                        player.getSceneLoadState()
+                                                == Player.SceneLoadState.LOADED);
+        if (!customStreamingReady) {
+            return;
+        }
+
         try {
             emu.grasscutter.game.world.InvestigationSpawnHelper.ensureNearby(this);
         } catch (Throwable __t) {
