@@ -87,6 +87,7 @@ public class Scene {
     private long lastTimeNotify = 0;
     private long lastStreamCheck = 0;
     private boolean reportedPreEntryTickGate = false;
+    private boolean reportedLoadingStreamGate = false;
     @Getter private boolean isPaused = false;
 
     private final List<Runnable> afterLoadedCallbacks = new ArrayList<>();
@@ -811,19 +812,47 @@ public class Scene {
 
         // LunaGC 7.1: do not run dumped-spawn fallback while scene scripts are merely still
         // loading. Script init runs asynchronously; isInit()==false alone cannot distinguish
-        // "no scripts for this scene" from "scripts have not finished loading yet". Running
-        // checkSpawns() in that window duplicates monsters/gadgets against the scripted copies
-        // and can flood a client that is still in SceneLoadState.LOADING.
+        // "no scripts for this scene" from "scripts have not finished loading yet".
         //
-        // Scene streaming also does not need the full world tick rate. Check nearby groups/spawns
-        // at most twice per second, matching LunaGC's working 7.1 behavior.
-        var nowMs = System.currentTimeMillis();
-        if (nowMs - this.lastStreamCheck >= 500L) {
-            this.lastStreamCheck = nowMs;
-            if (this.getScriptManager().isInit()) {
-                this.checkGroups();
-            } else if (this.getScriptManager().isInitAttempted()) {
-                this.checkSpawns();
+        // AstaPS' 7.1 resource set is substantially larger than LunaGC's known-working scene-3
+        // resource set (141 declared blocks versus 64). Streaming those groups while the client is
+        // still in SceneLoadState.LOADING can inject SceneEntityAppear/Disappear and group state
+        // before the client has emitted SceneInitFinishReq. The handshake packets themselves do not
+        // require live world groups: SceneInitFinishReq advances the player to INIT, and only then
+        // do we resume normal world streaming.
+        boolean sceneStreamingReady =
+                this.players.stream()
+                        .allMatch(
+                                player ->
+                                        player.getSceneLoadState()
+                                                        == Player.SceneLoadState.INIT
+                                                || player.getSceneLoadState()
+                                                        == Player.SceneLoadState.LOADED);
+
+        if (!this.players.isEmpty() && !sceneStreamingReady) {
+            if (!this.reportedLoadingStreamGate) {
+                this.reportedLoadingStreamGate = true;
+                Grasscutter.getLogger()
+                        .debug(
+                                "Scene {} group/spawn streaming gated until SceneInitFinishReq: players={}",
+                                this.getId(),
+                                this.players.stream()
+                                        .map(p -> p.getUid() + ":" + p.getSceneLoadState())
+                                        .toList());
+            }
+        } else {
+            this.reportedLoadingStreamGate = false;
+
+            // Scene streaming does not need the full world tick rate. Check nearby groups/spawns
+            // at most twice per second, matching LunaGC's working 7.1 cadence.
+            var nowMs = System.currentTimeMillis();
+            if (nowMs - this.lastStreamCheck >= 500L) {
+                this.lastStreamCheck = nowMs;
+                if (this.getScriptManager().isInit()) {
+                    this.checkGroups();
+                } else if (this.getScriptManager().isInitAttempted()) {
+                    this.checkSpawns();
+                }
             }
         }
 
