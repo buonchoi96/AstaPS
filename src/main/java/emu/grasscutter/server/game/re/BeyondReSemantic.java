@@ -170,7 +170,9 @@ public final class BeyondReSemantic {
     private static boolean isSensitiveKey(String key) {
         if (key == null) return false;
         String normalized = key.toLowerCase(Locale.ROOT).replace('-', '_');
-        return normalized.contains("passcode")
+        // Generated 7.1 PrivateChatReq and nested ChatInfo use the bare field name "text".
+        return normalized.equals("text")
+                || normalized.contains("passcode")
                 || normalized.contains("password")
                 || normalized.contains("credential")
                 || normalized.contains("token")
