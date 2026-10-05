@@ -67,7 +67,20 @@ public class HandlerSceneInitFinishReq extends PacketHandler {
             WidgetPetHelper.syncEquippedWidget(player);
 
             session.send(new PacketSceneInitFinishRsp(player));
-            session.send(buildWatermarkPacket());
+
+            // Stability first: do not execute any server-supplied Lua during the 7.1 scene-entry
+            // handshake. The custom AstaPS watermark is delivered through WindSeedType1Notify and
+            // the client executes its payload as Lua. A bad/incompatible chunk crashes client-side
+            // code instead of being ignored; this matches the observed KeyNotFoundException that
+            // appears immediately after the watermark changes to "AstaPS_7.1.0 | UID: ...".
+            //
+            // Leave the client's native UID watermark untouched until the scene-entry crash is
+            // conclusively isolated. The branding packet can be re-enabled later with a verified
+            // 7.1-safe payload.
+            Grasscutter.getLogger()
+                    .debug(
+                            "Skipping executable WindSeed watermark during 7.1 scene init uid={}",
+                            player.getUid());
 
             player.setSceneLoadState(SceneLoadState.INIT);
 
