@@ -79,68 +79,28 @@ public final class PlayerProgressManager extends BasePlayerDataManager {
      * Handler for player login.
      **********/
     public void onPlayerLogin() {
-        // Try unlocking open states on player login. This handles accounts where unlock conditions were
-        // already met before certain open state unlocks were implemented.
+        // Keep the pre-entry progress snapshot aligned with the known-working LunaGC 7.1 path.
+        // Do not bulk-force every OpenState, rebuild map areas, send offering deltas, or silently
+        // finish/forge statue quests before PlayerEnterSceneNotify. Those AstaPS extensions mutate
+        // client-visible scene state while the enter-scene state machine has not started yet.
         this.tryUnlockOpenStates(false);
 
-        if (!GAME_OPTIONS.questing.enabled) {
-            // Match remote LunaGC login unlocks when questing is off.
-            // IMPORTANT: do this BEFORE OpenStateUpdateNotify so the login snapshot already
-            // includes the bulk-unlocked map (remote applies these then notifies).
-            this.player.getUnlockedScenePoints(3).add(7);
-            // Do NOT mass-unlock every city/world area here - map fog is owned by statue/waypoint
-            // unlocks (see syncSceneAreasFromUnlockedPoints). Starter Mondstadt area only.
-            this.player.getUnlockedSceneAreas(3).add(1);
-            this.setOpenState(47, 1, false);
-            this.setOpenState(48, 1, false);
-            this.setOpenState(1101, 1, false);
-            this.setOpenState(1102, 1, false);
-
-            int unlocked = 0;
-            for (var openState : GameData.getOpenStateList()) {
-                int id = openState.getId();
-                if (BLACKLIST_OPEN_STATES.contains(id) || IGNORED_OPEN_STATES.contains(id)) {
-                    continue;
-                }
-                if (this.getOpenState(id) == 0) {
-                    unlocked++;
-                }
-                // Always force 1 into the player map so OpenStateUpdateNotify below is complete
-                // even for accounts that already had sparse/partial maps.
-                this.player.getOpenStates().put(id, 1);
-            }
-            emu.grasscutter.Grasscutter.getLogger()
-                    .debug(
-                            "Questing-off OpenState force-fill uid={} mapSize={} newlySet={}",
-                            this.player.getUid(),
-                            this.player.getOpenStates().size(),
-                            unlocked);
-        }
-
-        // Send notify to the client (after questing-off fill so the snapshot is complete).
         player.getSession().send(new PacketOpenStateUpdateNotify(this.player));
 
-        // Offerings such as the Sacred Sakura: send PlayerOfferingDataNotify on login, otherwise the
-        // client never shows the F prompt.
-        try {
-            emu.grasscutter.game.entity.gadget.OfferingHelper.onPlayerLogin(this.player);
-        } catch (Throwable ignored) {
-        }
-
-        // Add statue quests if necessary.
         this.addStatueQuestsOnLogin();
 
-        // Ensure spring volume props exist before first statue EnterTrans (tip/heal path).
-        try {
-            var sots = this.player.getSotsManager();
-            if (sots.getMaxVolume() <= 0) {
-                sots.setMaxVolume(Math.min(8500000, 5000 * 100)); // 5 statues worth baseline
-            }
-            if (sots.getCurrentVolume() <= 0) {
-                sots.setCurrentVolume(sots.getMaxVolume());
-            }
-        } catch (Throwable ignored) {
+        if (!GAME_OPTIONS.questing.enabled) {
+            this.player.getUnlockedScenePoints(3).add(7);
+            this.player.getUnlockedSceneAreas(3).add(1);
         }
+
+        emu.grasscutter.Grasscutter.getLogger()
+                .debug(
+                        "Luna-compatible progress login uid={} openStates={} points3={} areas3={}",
+                        this.player.getUid(),
+                        this.player.getOpenStates().size(),
+                        this.player.getUnlockedScenePoints(3).size(),
+                        this.player.getUnlockedSceneAreas(3).size());
     }
 
     /**********
@@ -174,37 +134,36 @@ public final class PlayerProgressManager extends BasePlayerDataManager {
      * Condition checking for setting open states.
      **********/
     private boolean areConditionsMet(OpenStateData openState) {
-        // Check all conditions and test if at least one of them is violated.
         for (var condition : openState.getCond()) {
             switch (condition.getCondType()) {
-                    // For level conditions, check if the player has reached the necessary level.
                 case OPEN_STATE_COND_PLAYER_LEVEL -> {
                     if (this.player.getLevel() < condition.getParam()) {
                         return false;
                     }
                 }
                 case OPEN_STATE_COND_QUEST -> {
-                    // check sub quest id for quest finished met requirements
-                    var quest = this.player.getQuestManager().getQuestById(condition.getParam());
-                    if (quest == null || quest.getState() != QuestState.QUEST_STATE_FINISHED) {
-                        return false;
+                    if (GAME_OPTIONS.questing.enabled) {
+                        var quest = this.player.getQuestManager().getQuestById(condition.getParam());
+                        if (quest == null || quest.getState() != QuestState.QUEST_STATE_FINISHED) {
+                            return false;
+                        }
                     }
                 }
                 case OPEN_STATE_COND_PARENT_QUEST -> {
-                    // check main quest id for quest finished met requirements
-                    // TODO not sure if its having or finished quest
-                    var mainQuest = this.player.getQuestManager().getMainQuestById(condition.getParam());
-                    if (mainQuest == null
-                            || mainQuest.getState() != ParentQuestState.PARENT_QUEST_STATE_FINISHED) {
-                        return false;
+                    if (GAME_OPTIONS.questing.enabled) {
+                        var mainQuest =
+                                this.player.getQuestManager().getMainQuestById(condition.getParam());
+                        if (mainQuest == null
+                                || mainQuest.getState()
+                                        != ParentQuestState.PARENT_QUEST_STATE_FINISHED) {
+                            return false;
+                        }
                     }
                 }
-                    // ToDo: Implement.
                 case OPEN_STATE_OFFERING_LEVEL, OPEN_STATE_CITY_REPUTATION_LEVEL -> {}
             }
         }
 
-        // Done. If we didn't find any violations, all conditions are met.
         return true;
     }
 
@@ -243,7 +202,7 @@ public final class PlayerProgressManager extends BasePlayerDataManager {
         // Get list of open states that are not yet unlocked.
         var lockedStates =
                 GameData.getOpenStateList().stream()
-                        .filter(s -> this.player.getOpenStates().getOrDefault(s, 0) == 0)
+                        .filter(s -> this.player.getOpenStates().getOrDefault(s.getId(), 0) == 0)
                         .toList();
 
         // Try unlocking all of them.
@@ -271,76 +230,30 @@ public final class PlayerProgressManager extends BasePlayerDataManager {
      ******************************************************************************************************************
      *****************************************************************************************************************/
     private void addStatueQuestsOnLogin() {
-        // Get all currently existing subquests for the "unlock all statues" main quest.
         var statueMainQuest = GameData.getMainQuestDataMap().get(303);
         if (statueMainQuest == null || statueMainQuest.getSubQuests() == null) {
-            this.seedUnlockedStatuesFromLegacyUnlockAll();
-            this.forgeAllStatueTalkGates();
             return;
         }
-        var statueSubQuests = statueMainQuest.getSubQuests();
 
-        // Add the main statue quest if it isn't active yet.
+        var statueSubQuests = statueMainQuest.getSubQuests();
         var statueGameMainQuest = this.player.getQuestManager().getMainQuestById(303);
+
         if (statueGameMainQuest == null) {
             this.player.getQuestManager().addQuest(30302);
             statueGameMainQuest = this.player.getQuestManager().getMainQuestById(303);
         }
 
-        // Migrate: old GetScenePointRsp unlocked-all statues visually without writing the set.
-        // Seed unlocked statues once so already-lit pillars stay lit; locked ones stay unlockable.
-        this.seedUnlockedStatuesFromLegacyUnlockAll();
-        // Rebuild map fog from unlocked points (statues + waypoints) - one area per unlock.
-        this.syncSceneAreasFromUnlockedPoints(3);
-
-        // Always mark statue Talk gates FINISHED so goddess F / heal / offer need no questing.
-        // Do NOT call GameQuest.finish(): finishExec hangs login / white-screens the client.
-        int finished = 0;
-        try {
-            if (statueGameMainQuest != null) {
-                for (var subData : statueSubQuests) {
-                    var subGameQuest = statueGameMainQuest.getChildQuestById(subData.getSubId());
-                    if (subGameQuest == null) {
-                        this.player.getQuestManager().addQuest(subData.getSubId());
-                        subGameQuest = statueGameMainQuest.getChildQuestById(subData.getSubId());
-                    } else if (subGameQuest.getState() == QuestState.QUEST_STATE_UNSTARTED) {
-                        this.player.getQuestManager().addQuest(subData.getSubId());
-                        subGameQuest = statueGameMainQuest.getChildQuestById(subData.getSubId());
-                    }
-                    if (subGameQuest != null
-                            && subGameQuest.getState() != QuestState.QUEST_STATE_FINISHED) {
-                        subGameQuest.setState(QuestState.QUEST_STATE_FINISHED);
-                        subGameQuest.setFinishTime(emu.grasscutter.utils.Utils.getCurrentSeconds());
-                        subGameQuest.save();
-                        finished++;
-                    }
-                }
-            }
-
-            // Starter-statue talk (NPC 1201 / talk 31141) also needs quest 35205 finished.
-            var q = this.player.getQuestManager().getQuestById(35205);
-            if (q == null) {
-                this.player.getQuestManager().addQuest(35205);
-                q = this.player.getQuestManager().getQuestById(35205);
-            }
-            if (q != null && q.getState() != QuestState.QUEST_STATE_FINISHED) {
-                q.setState(QuestState.QUEST_STATE_FINISHED);
-                q.setFinishTime(emu.grasscutter.utils.Utils.getCurrentSeconds());
-                q.save();
-                finished++;
-            }
-
-            // Forge EVERY area Talk gate - locked pillars auto-unlock on EnterTrans; F tip ready.
-            finished += this.forgeAllStatueTalkGates();
-        } catch (Throwable t) {
-            emu.grasscutter.Grasscutter.getLogger()
-                    .warn("Statue quest silent-finish failed uid={}", this.player.getUid(), t);
+        if (statueGameMainQuest == null) {
+            return;
         }
-        emu.grasscutter.Grasscutter.getLogger()
-                .debug(
-                        "Statue talk gates ready uid={} count={} (no quest prerequisite for F)",
-                        this.player.getUid(),
-                        finished);
+
+        for (var subData : statueSubQuests) {
+            var subGameQuest = statueGameMainQuest.getChildQuestById(subData.getSubId());
+            if (subGameQuest != null
+                    && subGameQuest.getState() == QuestState.QUEST_STATE_UNSTARTED) {
+                this.player.getQuestManager().addQuest(subData.getSubId());
+            }
+        }
     }
 
     /** Ensure starter statue exists; do not mass-unlock every statue (map fog is per-statue). */
