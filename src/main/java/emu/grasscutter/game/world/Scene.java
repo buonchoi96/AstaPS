@@ -86,6 +86,7 @@ public class Scene {
     @Getter protected int tickCount = 0;
     private long lastTimeNotify = 0;
     private long lastStreamCheck = 0;
+    private boolean reportedPreEntryTickGate = false;
     @Getter private boolean isPaused = false;
 
     private final List<Runnable> afterLoadedCallbacks = new ArrayList<>();
@@ -770,6 +771,39 @@ public class Scene {
             this.finishLoading();
             return;
         }
+
+        // Player.onLogin() adds the player to a World/Scene well before it finally sends
+        // PlayerEnterSceneNotify. AstaPS performs substantially more login work than LunaGC, so the
+        // world timer can tick several times in that gap. Streaming groups here used to create and
+        // broadcast hundreds of SceneEntityAppear/Disappear packets while the client's scene state
+        // was still NONE. The working LunaGC path reaches PlayerEnterSceneNotify before that race is
+        // observable.
+        //
+        // Keep metadata/script initialization asynchronous, but do not run scene gameplay/streaming
+        // until the first player has actually started the enter-scene state machine. Constructing
+        // PacketPlayerEnterSceneNotify changes NONE -> LOADING, after which the ordinary tick path
+        // resumes immediately.
+        boolean sceneEntryStarted =
+                this.players.stream()
+                        .anyMatch(
+                                player ->
+                                        player.getSceneLoadState()
+                                                != Player.SceneLoadState.NONE);
+        if (!this.players.isEmpty() && !sceneEntryStarted) {
+            if (!this.reportedPreEntryTickGate) {
+                this.reportedPreEntryTickGate = true;
+                Grasscutter.getLogger()
+                        .debug(
+                                "Scene {} pre-entry tick gated: players={} (waiting for PlayerEnterSceneNotify)",
+                                this.getId(),
+                                this.players.stream()
+                                        .map(p -> p.getUid() + ":" + p.getSceneLoadState())
+                                        .toList());
+            }
+            this.finishLoading();
+            return;
+        }
+        this.reportedPreEntryTickGate = false;
 
         if (!isPaused) {
             this.getScheduler().runTasks();
