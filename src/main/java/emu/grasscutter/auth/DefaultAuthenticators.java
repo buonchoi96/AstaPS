@@ -390,6 +390,18 @@ public final class DefaultAuthenticators {
 
     /** Handles the authentication request from the game when using a combo token/session key. */
     public static class SessionKeyAuthenticator implements Authenticator<ComboTokenResJson> {
+        static void logAttempt(String address, String uid, String token, Account account) {
+            Grasscutter.getLogger().info(
+                    "[Combo] login from {} uid={} tokenPresent={} account={}",
+                    address, uid, token != null, account != null);
+        }
+
+        static void logTokenAdoption(String uid, String previous, String supplied) {
+            Grasscutter.getLogger().info(
+                    "[Combo] adopting token for uid={} oldPresent={} newPresent={}",
+                    uid, previous != null, supplied != null);
+        }
+
         @Override
         public ComboTokenResJson authenticate(AuthenticationRequest request) {
             var response = new ComboTokenResJson();
@@ -412,18 +424,8 @@ public final class DefaultAuthenticators {
             }
 
             // Log the combo login attempt for diagnostics.
-            String dbKey = "";
             Account account = DatabaseHelper.getAccountById(loginData.uid);
-            if (account != null) {
-                var sk = account.getSessionKey();
-                dbKey = sk == null ? "<null>" : sk.substring(0, Math.min(20, sk.length()));
-            }
-            Grasscutter.getLogger().info(
-                    "[Combo] login from " + address
-                            + " uid=" + loginData.uid
-                            + " token=" + (loginData.token == null ? "<null>" : loginData.token.substring(0, Math.min(20, loginData.token.length())))
-                            + " dbKey=" + dbKey
-                            + " account=" + (account != null));
+            logAttempt(address, loginData.uid, loginData.token, account);
 
             // Get account from database.
             // Check if account exists/token is valid.
@@ -433,11 +435,7 @@ public final class DefaultAuthenticators {
             if (account != null) {
                 var sk = account.getSessionKey();
                 if (sk == null || !sk.equals(loginData.token)) {
-                    Grasscutter.getLogger().info(
-                            "[Combo] adopting token for uid=" + loginData.uid
-                                    + " (old=" + (sk == null ? "null" : sk.substring(0, Math.min(12, sk.length())))
-                                    + " new=" + (loginData.token == null ? "null" : loginData.token.substring(0, Math.min(12, loginData.token.length())))
-                                    + ")");
+                    logTokenAdoption(loginData.uid, sk, loginData.token);
                     account.setSessionKey(loginData.token);
                     account.save();
                 }
