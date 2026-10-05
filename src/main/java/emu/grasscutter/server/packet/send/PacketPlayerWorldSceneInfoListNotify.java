@@ -45,13 +45,15 @@ public class PacketPlayerWorldSceneInfoListNotify extends BasePacket {
             if (scene == 3) {
                 worldInfoBuilder.setMapLayerInfo(
                         MapLayerInfo._MapLayerInfo.newBuilder()
-                                .addAllUnlockMapLayerList(
-                                        GameData.getMapLayerDataMap().keySet()) // MapLayer Ids
-                                // the floor list is the one unnamed repeated field of 7.0's _MapLayerInfo
+                                // The generated 7.1 Java names are reversed. The corrected 7.1
+                                // source (kitkat-multiverse d9d67f9) puts layer IDs in field 2
+                                // and group IDs in field 7. Keep the generated sources intact.
                                 .addAllUnlockMapLayerGroupList(
+                                        GameData.getMapLayerDataMap().keySet())
+                                .addAllUnlockMapLayerList(
                                         GameData.getMapLayerGroupDataMap()
-                                                .keySet()) // will show MapLayer options when hovered over
-                                .build()); // map layer test
+                                                .keySet())
+                                .build());
             }
 
             proto.addInfoList(worldInfoBuilder.build());
