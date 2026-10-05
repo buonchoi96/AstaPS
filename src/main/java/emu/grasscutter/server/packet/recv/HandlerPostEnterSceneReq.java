@@ -48,6 +48,11 @@ public class HandlerPostEnterSceneReq extends PacketHandler {
 
         if (!freshPlayerBootstrap) session.send(new PacketPostEnterSceneRsp(player));
 
+        // At this point the client has explicitly completed the 7.1 scene-entry handshake.
+        // AstaPS-only world/progression conveniences that previously ran before EnterSceneDoneRsp
+        // are safe to resume here.
+        runDeferredAstaSceneSync(player);
+
         EscoffierSkillCookHelper.syncToClient(player);
         EntryNotice.sendOnce(player);
         session.send(new PacketGetPlayerFriendListRsp(player));
@@ -56,6 +61,83 @@ public class HandlerPostEnterSceneReq extends PacketHandler {
         // Fresh 7.1 starts the opening from AQ351/35104. Do not add the independent legacy
         // first-login cutscene on top of that bootstrap.
         if (!freshPlayerBootstrap) this.playOpeningCutscene(player);
+    }
+
+    private void runDeferredAstaSceneSync(emu.grasscutter.game.player.Player player) {
+        // Daily commissions.
+        try {
+            var dailyTaskManager = player.getDailyTaskManager();
+            if (dailyTaskManager != null) {
+                dailyTaskManager.onPlayerLogin();
+                dailyTaskManager.loadActiveGroups(player.getScene());
+                dailyTaskManager.syncAll();
+            }
+        } catch (Throwable t) {
+            emu.grasscutter.Grasscutter.getLogger()
+                    .warn("Deferred daily-task scene sync failed uid={}: {}", player.getUid(), t.toString());
+        }
+
+        // Combine convenience unlocks.
+        try {
+            player.getServer().getCombineSystem().onPlayerLogin(player);
+        } catch (Throwable t) {
+            emu.grasscutter.Grasscutter.getLogger()
+                    .warn("Deferred combine login sync failed uid={}: {}", player.getUid(), t.toString());
+        }
+
+        // Domain handbook/map convenience sync.
+        try {
+            emu.grasscutter.game.player.DomainHandbookHelper.onEnterScene(
+                    player, player.getSceneId());
+        } catch (Throwable t) {
+            emu.grasscutter.Grasscutter.getLogger()
+                    .warn("Deferred domain handbook sync failed uid={}: {}", player.getUid(), t.toString());
+        }
+
+        // Artifact transmuter offer.
+        try {
+            emu.grasscutter.game.systems.ArtifactTransmuterSystem.sendLoginNotifyOnce(player);
+        } catch (Throwable t) {
+            emu.grasscutter.Grasscutter.getLogger()
+                    .warn("Deferred ArtifactTransmuter sync failed uid={}: {}", player.getUid(), t.toString());
+        }
+
+        // Refresh only an already-unlocked nearest statue talk gate.
+        try {
+            int sceneId = player.getSceneId();
+            var me = player.getPosition();
+            Object[] nearest = null;
+            for (var e : emu.grasscutter.data.GameData.getScenePointEntryMap().values()) {
+                if (e == null || e.getPointData() == null || e.getSceneId() != sceneId) continue;
+                if (!emu.grasscutter.game.managers.StatueTalkQuests.isStatuePoint(e.getPointData())) continue;
+                int pointId = e.getPointData().getId();
+                if (!player.getUnlockedScenePoints(sceneId).contains(pointId)) continue;
+
+                var pd = e.getPointData();
+                var pos = pd.getTranPos() != null ? pd.getTranPos() : pd.getPos();
+                double distance = 999999.0;
+                if (me != null && pos != null) distance = me.computeDistance(pos);
+
+                if (nearest == null || distance < (Double) nearest[1]) {
+                    nearest = new Object[] {pointId, distance};
+                }
+            }
+            if (nearest != null) {
+                player.getProgressManager()
+                        .refreshStatueTalkGate(sceneId, (Integer) nearest[0]);
+            }
+        } catch (Throwable t) {
+            emu.grasscutter.Grasscutter.getLogger()
+                    .warn("Deferred statue scene sync failed uid={}: {}", player.getUid(), t.toString());
+        }
+
+        // TPS ammunition reserve packet(s), if relevant.
+        try {
+            emu.grasscutter.game.tps.TpsWeaponSystem.sendSceneAmmunition(player);
+        } catch (Throwable t) {
+            emu.grasscutter.Grasscutter.getLogger()
+                    .warn("Deferred TPS ammunition sync failed uid={}: {}", player.getUid(), t.toString());
+        }
     }
 
     /** Fired here rather than at login: a cutscene sent before the scene is up is discarded. */

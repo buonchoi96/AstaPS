@@ -26,132 +26,62 @@ public class HandlerEnterSceneDoneReq extends PacketHandler {
 
         var player = session.getPlayer();
 
-        // Finished loading
+        // Keep the critical 7.1 scene-entry completion path aligned with the known-working
+        // LunaGC server. Do not inject AstaPS-only handbook/offering/statue/TPS packets before
+        // EnterSceneDoneRsp; the client has not yet sent PostEnterSceneReq at this point.
         player.setSceneLoadState(SceneLoadState.LOADED);
-        // 7.0 移植：进场景完成时校正世界归属
-        try {
-            session.getServer().getMultiplayerSystem().reconcileMultiplayerWorld(player);
-        } catch (Throwable t) {
-        }
 
-        // Suppress LUA SetMonsterBattleByGroup ForceAlert while nearby groups bootstrap
-        // under the player's feet (ENTER_REGION false-fires, giving a hilichurl horn on login/reload).
-        try {
-            emu.grasscutter.game.world.WorldBossSpawnHelper.markPlayerTeleportGrace(player);
-        } catch (Throwable ignored) {
-        }
+        session.send(new PacketPlayerTimeNotify(player));
 
-        // Done
-
-        session.send(new PacketPlayerTimeNotify(player)); // Probably not the right place
-
-        // Spawn player in world
         player.getScene().spawnPlayer(player);
-
-        // Spawn other entites already in world
         player.getScene().showOtherEntities(player);
 
-        // Locations
         session.send(new PacketWorldPlayerLocationNotify(player.getWorld()));
         session.send(new PacketScenePlayerLocationNotify(player.getScene()));
         session.send(new PacketWorldPlayerRTTNotify(player.getWorld()));
+
         var avatarEntity = player.getTeamManager().getCurrentAvatarEntity();
-        float currentHpDebts = avatarEntity.getFightProperty(FightProperty.FIGHT_PROP_CUR_HP_DEBTS);
+        float currentHpDebts =
+                avatarEntity.getFightProperty(FightProperty.FIGHT_PROP_CUR_HP_DEBTS);
         if (currentHpDebts > 0.0f) {
-            avatarEntity.getWorld().broadcastPacket(new PacketEntityFightPropChangeReasonNotify(avatarEntity, FightProperty.FIGHT_PROP_CUR_HP_DEBTS, currentHpDebts, PropChangeReasonOuterClass.PropChangeReason.PropChangeReason_PROP_CHANGE_NONE, ChangeHpDebtsReason._ChangeHpDebtsReason._ChangeHpDebtsReason_CHANGE_HP_DEBTS_NONE));
+            avatarEntity
+                    .getWorld()
+                    .broadcastPacket(
+                            new PacketEntityFightPropChangeReasonNotify(
+                                    avatarEntity,
+                                    FightProperty.FIGHT_PROP_CUR_HP_DEBTS,
+                                    currentHpDebts,
+                                    PropChangeReasonOuterClass.PropChangeReason
+                                            .PropChangeReason_PROP_CHANGE_NONE,
+                                    ChangeHpDebtsReason
+                                            ._ChangeHpDebtsReason
+                                            ._ChangeHpDebtsReason_CHANGE_HP_DEBTS_NONE));
         }
-        // spawn NPC
+
         player.getScene().loadNpcForPlayerEnter(player);
 
-        // notify client to load the npc for quest
-        var questGroupSuites = player.getQuestManager().getSceneGroupSuite(player.getSceneId());
-
+        var questGroupSuites =
+                player.getQuestManager().getSceneGroupSuite(player.getSceneId());
         player.getScene().loadGroupForQuest(questGroupSuites);
         Grasscutter.getLogger()
-                .trace("Loaded Scene {} Quest(s) Groupsuite(s): {}", player.getSceneId(), questGroupSuites);
+                .trace(
+                        "Loaded Scene {} Quest(s) Groupsuite(s): {}",
+                        player.getSceneId(),
+                        questGroupSuites);
         session.send(new PacketGroupSuiteNotify(questGroupSuites));
 
-        // Commission monsters live in dynamic groups exactly like the quest ones above, and nothing
-        // else brings them in: generation only loads them when the player already happens to be
-        // standing in Teyvat with a live scene, which is never true at login. Without this the
-        // commission is issued and tracked but its monsters never spawn.
-        var dailyTaskManager = player.getDailyTaskManager();
-        if (dailyTaskManager != null) {
-            // Deferred from Player.onLogin so no DailyTaskDataNotify or commission generation can
-            // perturb the 7.1 pre-entry handshake.
-            dailyTaskManager.onPlayerLogin();
-            dailyTaskManager.loadActiveGroups(player.getScene());
-        }
-
-        // Combine recipe convenience unlocks are likewise not part of LunaGC's pre-entry snapshot.
-        try {
-            player.getServer().getCombineSystem().onPlayerLogin(player);
-        } catch (Throwable t) {
-            Grasscutter.getLogger()
-                    .warn("Deferred combine login sync failed uid={}: {}", player.getUid(), t.toString());
-        }
-
-        // Reset timer for sending player locations
+        // Do not run DailyTask/Combine/DomainHandbook/ArtifactTransmuter/Statue/TPS extensions
+        // until PostEnterSceneReq. They are not part of LunaGC's critical EnterSceneDone path.
         player.resetSendPlayerLocTime();
 
-        try {
-            emu.grasscutter.game.player.DomainHandbookHelper.onEnterScene(player, player.getSceneId());
-        } catch (Throwable ignored) {
-        }
+        Grasscutter.getLogger()
+                .debug(
+                        "Luna-compatible EnterSceneDone uid={} scene={} entities={} -> sending Rsp before AstaPS extensions",
+                        player.getUid(),
+                        player.getSceneId(),
+                        player.getScene().getEntities().size());
 
-        // Artifact Transmuter: re-send Offer after entering the scene. On a slow cold start the delayed
-        // StoreNotify task from onLogin may not have fired yet.
-        try {
-            emu.grasscutter.game.systems.ArtifactTransmuterSystem.sendLoginNotifyOnce(player);
-        } catch (Throwable t) {
-            Grasscutter.getLogger()
-                    .warn("ArtifactTransmuter login Offer (EnterSceneDone) failed uid={}: {}", player.getUid(), t.toString());
-        }
-
-        // ===== 进场景时主动刷新神像代理（不依赖客户端 EnterTransPoint 通知）=====
-        try {
-            int scId = player.getSceneId();
-            var me = player.getPosition();
-            java.util.List<Object[]> cands = new java.util.ArrayList<>();
-            int statueCnt = 0;
-            for (var e : emu.grasscutter.data.GameData.getScenePointEntryMap().values()) {
-                if (e == null || e.getPointData() == null) continue;
-                if (e.getSceneId() != scId) continue;
-                if (!emu.grasscutter.game.managers.StatueTalkQuests.isStatuePoint(e.getPointData()))
-                    continue;
-                statueCnt++;
-                var pd = e.getPointData();
-                var pos = pd.getTranPos() != null ? pd.getTranPos() : pd.getPos();
-                double d = 999999.0;
-                if (me != null && pos != null) {
-                    try {
-                        d = me.computeDistance(pos);
-                    } catch (Throwable ignored) {
-                    }
-                }
-                cands.add(new Object[] {pd.getId(), d});
-            }
-            cands.sort(
-                    (x, y) -> Double.compare((Double) x[1], (Double) y[1]));
-            int limit = Math.min(1, cands.size());
-            StringBuilder done = new StringBuilder();
-            for (int i = 0; i < limit; i++) {
-                int pid = (Integer) cands.get(i)[0];
-                try {
-                    if (player.getGoddessNpcEntityByPoint().containsKey(pid)) continue;
-                    // 真解锁 + 补雕像 + 铺代理（三者一起，否则要么不能传送、要么雕像消失）
-                    // 不自动解锁：只对“已解锁”的点刷新代理（没解锁就什么都不做）
-                    player.getProgressManager().refreshStatueTalkGate(scId, pid);
-                    done.append(pid).append(' ');
-                } catch (Throwable t) {
-                }
-            }
-        } catch (Throwable t) {
-        }
-        // TPS ammunition reserves, which the client expects before the Rsp.
-        emu.grasscutter.game.tps.TpsWeaponSystem.sendSceneAmmunition(player);
-
-        // Rsp
         session.send(new PacketEnterSceneDoneRsp(player));
     }
+
 }
