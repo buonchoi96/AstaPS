@@ -14,7 +14,7 @@ public class PacketEmptyRsp extends BasePacket {
         super(opcode, clientSequence(requestHeader));
     }
 
-    private static int clientSequence(byte[] requestHeader) {
+    static int clientSequence(byte[] requestHeader) {
         if (requestHeader == null || requestHeader.length == 0) return 0;
         try {
             return PacketHead.parseFrom(requestHeader).getClientSequenceId();

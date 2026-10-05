@@ -230,6 +230,14 @@ public final class BeyondReRecorder {
         manifest.put("clientVersion", emu.grasscutter.GameConstants.VERSION);
         manifest.put("astaPsCommit", System.getProperty("grasscutter.git.commit", "unknown"));
         manifest.put("upstreamBaseSha", System.getProperty("grasscutter.upstream.commit", "unknown"));
+        manifest.put("buildTimestamp", System.getProperty("grasscutter.build.timestamp", "unknown"));
+        manifest.put("protoSourceRevisions", Map.of(
+                "astaPsGenerated71", System.getProperty("grasscutter.git.commit", "unknown"),
+                "kitkatGitLab71", emu.grasscutter.game.beyond.BeyondPresenceProtocol71.SOURCE_REVISION));
+        manifest.put("schemaConfidenceNotes", List.of(
+                "Presence wrappers use pinned GitLab 7.1 descriptors and existing 5960/9779 opcodes; live RPC validation remains pending.",
+                "MapLayerInfo fields 2/7 use corrected GitLab 7.1 names; this does not establish a fix for client key 3.",
+                "Other generated schemas and unknown-wire candidates retain their previous confidence; no blanket protocol replacement."));
         manifest.put("rawPayloadWarning", "Raw research captures may contain sensitive player data.");
         Map<String, Object> recorder = new LinkedHashMap<>();
         recorder.put("captureAllPackets", options.captureAllPackets);
@@ -278,6 +286,10 @@ public final class BeyondReRecorder {
             return new TypedDecode(false, false, Map.of());
         }
         try {
+            var recovered = emu.grasscutter.game.beyond.BeyondPresenceProtocol71.parse(name, payload);
+            if (recovered != null) {
+                return new TypedDecode(true, true, messageFields(recovered));
+            }
             String className = "emu.grasscutter.net.proto." + name + "OuterClass$" + name;
             Class<?> type = Class.forName(className);
             Method parseFrom = type.getMethod("parseFrom", byte[].class);
@@ -296,7 +308,13 @@ public final class BeyondReRecorder {
     private static Map<String, Object> messageFields(Message message) {
         Map<String, Object> decoded = new LinkedHashMap<>();
         for (Map.Entry<FieldDescriptor, Object> entry : message.getAllFields().entrySet()) {
-            decoded.put(entry.getKey().getName(), normalizeProtoValue(entry.getValue()));
+            String fieldName = entry.getKey().getName();
+            if ("_MapLayerInfo".equals(message.getDescriptorForType().getName())) {
+                // Pinned 7.1 source corrects these reversed generated Java field names.
+                if (entry.getKey().getNumber() == 2) fieldName = "_unlock_map_layer_list";
+                if (entry.getKey().getNumber() == 7) fieldName = "_unlock_map_layer_group_list";
+            }
+            decoded.put(fieldName, normalizeProtoValue(entry.getValue()));
         }
         return decoded;
     }
