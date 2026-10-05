@@ -16,6 +16,7 @@ public final class WorldRegions {
     private WorldRegions() {}
 
     private static Set<Integer> areaIds;
+    private static Int2ObjectMap<Set<Integer>> areaIdsByScene;
     private static Int2ObjectMap<List<Integer>> regionsByScene;
 
     public static synchronized Set<Integer> allAreaIds() {
@@ -26,6 +27,23 @@ public final class WorldRegions {
         ids.remove(0);
         areaIds = ids;
         return ids;
+    }
+
+    /** Wire area ids that actually exist in WorldAreaConfigData for one scene. */
+    public static synchronized Set<Integer> validAreaIds(int sceneId) {
+        if (areaIdsByScene == null) {
+            areaIdsByScene = new Int2ObjectOpenHashMap<>();
+            GameData.getWorldAreaDataMap().values().forEach(
+                    area -> {
+                        var ids =
+                                areaIdsByScene.computeIfAbsent(
+                                        area.getSceneId(), ignored -> new TreeSet<Integer>());
+                        if (area.getParentArea() > 0) ids.add(area.getParentArea());
+                        if (area.getChildArea() > 0) ids.add(area.getChildArea());
+                    });
+        }
+
+        return areaIdsByScene.getOrDefault(sceneId, Set.of());
     }
 
     public static synchronized List<Integer> openRegionIds(int sceneId) {
