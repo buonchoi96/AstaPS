@@ -1,0 +1,16 @@
+[
+  "activate_window",
+  "click",
+  "drag",
+  "get_window",
+  "get_window_state",
+  "launch_app",
+  "list_apps",
+  "list_windows",
+  "perform_secondary_action",
+  "press_key",
+  "scroll",
+  "set_value",
+  "target",
+  "type_text"
+]
