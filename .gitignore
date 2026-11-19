@@ -142,3 +142,6 @@ __pycache__/
 
 # Editable reward configuration, populated beside the server JAR on first launch.
 /rewards/
+
+# Per-installation MongoDB database (never commit)
+/database/

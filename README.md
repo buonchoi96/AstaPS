@@ -115,6 +115,12 @@ On Windows use `./gradlew.bat`.
 4. Start it again. The dispatch server listens on `8088` and the game server on `22101` by default.
 5. Point the client at the dispatch server: [GrasscutterTools](https://github.com/jie65535/GrasscutterCommandGenerator) has a built-in proxy, or use Fiddler, mitmproxy or a client patch.
 
+### Windows launcher with local MongoDB
+
+For a Windows checkout, use `ServerStart.cmd` after building `grasscutter-7.2.0.jar`. The launcher starts MongoDB Community on `127.0.0.1:27017`, waits for readiness, then runs the game server. Database files are stored persistently in `database/` at the repository root; logs are written to `logs/`. When the server exits, the launcher attempts a graceful MongoDB shutdown using `mongosh`. MongoDB Community 8.0.38 and MongoDB Shell 2.14.2 are installed under `E:\MongoDB\`. If it cannot locate `mongod.exe`, set `ASTAPS_MONGOD` to its absolute path.
+
+Keep the separately cloned [AstaPS-Resource](https://github.com/MeChen618/AstaPS-Resource) pack in `../resources`. Create a local Windows directory junction from this checkout's `resources/` to `../resources`; the server expects the usual `resources/ExcelBinOutput/`, `resources/BinOutput/`, and other subdirectories. Neither resources nor database files should be checked into this source repository. The first launch can generate `config.json` and exit; restart after reviewing the generated config.
+
 ## Commands
 
 In-game commands use `/`; the server console omits it. Use `help` to list commands, or `help <command> [subcommand...]` for syntax and aliases. The console supports Tab completion; invalid arguments show the matching syntax.
